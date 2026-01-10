@@ -1,0 +1,1524 @@
+Python Script Architecture for Automated NAS100 Pattern Tracking + GPT-4o-mini Analysis
+System Overview
+A Python application that runs during US market hours (9:30 AM - 11:30 AM EST), captures NAS100 chart screenshots at scheduled intervals, sends them to GPT-4o-mini Vision API for pattern analysis, logs all results to CSV, and sends Telegram notifications with trade setup alerts.
+
+Component 1: Configuration & Environment Setup
+Required Python Libraries
+MetaTrader5 - MT5 API connection for chart access and screenshot capture
+
+openai - OpenAI API client for GPT-4o-mini vision analysis
+
+pandas - Data manipulation and CSV logging
+
+schedule or APScheduler - Time-based task scheduling
+
+python-telegram-bot - Telegram notifications
+
+Pillow (PIL) - Image processing and optimization
+
+pytz - Timezone handling for EST/EDT conversion
+
+python-dotenv - Environment variable management for API keys
+
+Configuration File Structure (config.yaml or .env)
+
+text
+MT5 Connection:
+- MT5_LOGIN (account number)
+- MT5_PASSWORD
+- MT5_SERVER
+- MT5_PATH (installation directory)
+
+OpenAI API:
+- OPENAI_API_KEY
+- MODEL_NAME = "gpt-4o-mini" (vision capable)
+- MAX_TOKENS = 800 (for detailed pattern analysis)
+- IMAGE_DETAIL = "high" (for accurate chart reading)
+
+Telegram:
+- TELEGRAM_BOT_TOKEN
+- TELEGRAM_CHAT_ID (your personal chat for notifications)
+
+Trading Parameters:
+- SYMBOL = "NAS100" or "NQ" (depending on broker)
+- TIMEFRAME = MT5.TIMEFRAME_M5 (5-minute charts)
+- SCREENSHOT_TIMES = [09:30, 10:00, 10:30, 11:00, 11:30] (EST)
+- TIMEZONE = "America/New_York"
+
+Risk Management:
+- ACCOUNT_BALANCE (updated daily or pulled from MT5)
+- RISK_PERCENTAGE = 0.01 (1%)
+- POINT_VALUE = 0.25 (for NAS100 micro contracts)
+
+Storage:
+- SCREENSHOT_FOLDER = "./screenshots/"
+- LOG_FILE = "./trading_log.csv"
+- DAILY_SUMMARY_FOLDER = "./daily_summaries/"
+Component 2: MT5 Chart Screenshot Capture Module
+Functionality
+Connect to MT5, access NAS100 5-minute chart, capture clean screenshot at scheduled times, save with timestamp naming convention.
+
+Key Functions
+initialize_mt5_connection()
+
+Initialize MT5 terminal connection using credentials from config
+
+Verify connection status
+
+Handle connection errors and retry logic (3 attempts with 30-second delays)
+
+Return connection status (True/False)
+
+get_chart_screenshot(symbol, timeframe, width=1920, height=1080)
+
+Switch to specified symbol and timeframe
+
+Ensure chart displays: previous day high/low lines, VWAP, current session open
+
+Remove unnecessary indicators/overlays for clean analysis
+
+Capture screenshot using chart_screenshot() function
+
+Return image file path or None if failed
+
+add_reference_lines_to_chart()
+
+Programmatically add horizontal lines for:
+
+Previous day high (red line)
+
+Previous day low (green line)
+
+Opening range high/low (dotted lines if after 10:00 AM)
+
+VWAP (yellow line)
+
+These lines help GPT-4o-mini identify key structure levels
+forexfactory
+​
+youtube
+​
+
+save_screenshot_with_metadata(image, timestamp)
+
+Save image with naming: NAS100_YYYYMMDD_HHMM.png
+
+Compress image to <1MB for API efficiency (reduces cost)
+
+Store in dated subfolder: screenshots/2026-01-10/
+
+Return full file path for logging
+
+Component 3: GPT-4o-mini Vision Analysis Module
+Functionality
+Send chart screenshot to OpenAI vision API with structured prompt, receive pattern analysis, parse response into actionable data.
+
+Optimized GPT-4o-mini Prompt Structure
+System Prompt (consistent for all images):
+
+
+text
+You are an expert NAS100 daytrader analyzing 5-minute charts for structure-based trading setups. 
+Analyze the provided chart image and identify:
+1. Market regime (trending up, trending down, or ranging)
+2. Presence of valid trade setups (opening range breakout, structure break, mean reversion)
+3. Exact entry, stop loss, and take profit levels based on price structure
+4. Setup quality rating (High/Medium/Low confidence)
+
+Respond ONLY in valid JSON format with no additional text.
+User Prompt (sent with each image):
+
+
+text
+Current Time: {timestamp} EST
+Account Balance: ${account_balance}
+Risk Per Trade: 1% = ${risk_amount}
+
+Analyze this NAS100 5-minute chart and provide:
+
+{
+  "timestamp": "YYYY-MM-DD HH:MM EST",
+  "current_price": float,
+  "market_regime": "trending_up" | "trending_down" | "ranging" | "unclear",
+  "regime_reasoning": "Brief explanation of why this regime classification",
+  
+  "valid_setup_exists": true | false,
+  "setup_type": "opening_range_breakout" | "structure_break" | "mean_reversion" | "none",
+  "setup_direction": "long" | "short" | "none",
+  
+  "entry_price": float | null,
+  "stop_loss_price": float | null,
+  "stop_loss_reasoning": "Why this structural level invalidates the trade",
+  "take_profit_1": float | null,
+  "take_profit_1_reasoning": "Next structural resistance/support level",
+  "take_profit_2": float | null,
+  
+  "stop_distance_ticks": int | null,
+  "reward_risk_ratio": float | null,
+  
+  "setup_quality": "high" | "medium" | "low" | "none",
+  "confidence_score": 0-100,
+  "analysis_notes": "Key observations about price structure, volume, pattern quality",
+  
+  "trade_recommendation": "enter_immediately" | "wait_for_confirmation" | "no_trade",
+  "caution_flags": ["list", "any", "concerns"]
+}
+
+Reference levels visible on chart:
+- Previous Day High: {prev_day_high}
+- Previous Day Low: {prev_day_low}
+- Opening Range High: {or_high} (if after 10:00 AM)
+- Opening Range Low: {or_low} (if after 10:00 AM)
+- Current VWAP: {vwap}
+
+Identify setups using ONLY observable price structure and these reference levels.
+Key Functions
+analyze_chart_with_gpt4(image_path, market_context)
+
+Read image file and encode to base64
+
+Construct API request with system prompt + user prompt + image
+
+Call OpenAI API: openai.ChatCompletion.create() with model="gpt-4o-mini"
+
+Include max_tokens=800 and temperature=0.3 (for consistent analytical responses)
+
+Handle API errors (rate limits, timeouts) with retry logic
+
+Return parsed JSON response or error status
+
+parse_ai_response(json_response)
+
+Validate JSON structure
+
+Extract all fields into Python dictionary
+
+Calculate position size if valid setup: risk_amount / (stop_distance_ticks * point_value)
+
+Add calculated fields: position_size_contracts, dollar_risk, dollar_target_1
+
+Return enriched dictionary with all trading parameters
+
+validate_setup_rules(parsed_response)
+
+Apply strategy checklist filters:
+
+Is reward:risk ratio ≥ 1.5?
+colibritrader
+​
+
+Is stop loss at logical structure invalidation point?
+reddit+1
+​
+
+Does setup match current regime? (no breakouts in ranging, no mean reversion in strong trends)
+
+Is confidence score ≥ 65?
+
+Return boolean (True = valid, False = filter failed) + reason if rejected
+
+Component 4: Automated Logging System
+Functionality
+Store all analysis results in structured CSV for historical tracking, pattern performance analysis, and strategy validation.
+
+CSV Structure (trading_log.csv)
+Column Headers:
+
+
+text
+date, time_est, timestamp_utc, screenshot_path, current_price,
+market_regime, regime_reasoning,
+valid_setup, setup_type, setup_direction,
+entry_price, stop_loss, stop_reasoning, take_profit_1, tp1_reasoning, take_profit_2,
+stop_distance_ticks, reward_risk_ratio,
+position_size_contracts, dollar_risk, dollar_target_1,
+setup_quality, confidence_score, analysis_notes,
+trade_recommendation, caution_flags,
+actual_trade_taken (yes/no), trade_outcome (hit_tp1/hit_stop/manual_close/not_traded),
+actual_profit_loss, actual_r_multiple,
+weekly_trade_count, notes
+Key Functions
+log_analysis_to_csv(parsed_data, log_file)
+
+Append new row to CSV with all analysis fields
+
+Create CSV with headers if doesn't exist
+
+Use pandas for clean data handling
+
+Add actual_trade_taken = "no" by default (manual update later if traded)
+
+Flush/sync file to prevent data loss
+
+update_trade_outcome(timestamp, outcome, profit_loss)
+
+Find row matching timestamp
+
+Update columns: actual_trade_taken, trade_outcome, actual_profit_loss, actual_r_multiple
+
+Calculate R-multiple: profit_loss / dollar_risk
+
+Save updated CSV
+
+get_weekly_summary_stats(log_file)
+
+Filter last 7 days of data
+
+Calculate:
+
+Total setups identified
+
+Valid high-quality setups count
+
+Setups by type (breakout vs mean reversion)
+
+Average confidence score
+
+Regime distribution (% trending vs ranging)
+
+If trades taken: win rate, average R, profit factor
+
+Return dictionary of statistics
+
+Component 5: Telegram Notification System
+Functionality
+Send real-time alerts when high-quality setups are identified, daily summaries of activity, and weekly performance reports.
+
+Notification Types
+Type 1: Real-Time Setup Alert (Immediate)
+Triggered when GPT-4o-mini identifies valid_setup = true AND setup_quality = "high" AND trade_recommendation = "enter_immediately"
+
+Message Format:
+
+
+text
+🚨 NAS100 HIGH-QUALITY SETUP DETECTED 🚨
+
+📊 Setup: {setup_type} | Direction: {setup_direction}
+⏰ Time: {timestamp} EST
+💰 Current Price: {current_price}
+
+📈 Entry: {entry_price}
+🛑 Stop Loss: {stop_loss} ({stop_distance_ticks} ticks)
+🎯 Target 1: {take_profit_1}
+🎯 Target 2: {take_profit_2}
+
+📐 Risk:Reward = 1:{reward_risk_ratio}
+📦 Position Size: {position_size_contracts} micro contracts
+💵 Risk Amount: ${dollar_risk} (1%)
+💎 Potential Profit (TP1): ${dollar_target_1}
+
+🧠 AI Analysis: {analysis_notes}
+
+⚠️ Caution: {caution_flags if any}
+🔍 Confidence: {confidence_score}%
+
+🌐 Market Regime: {market_regime}
+
+📷 Screenshot: [Link to image]
+Type 2: Medium-Quality Setup Alert
+When setup_quality = "medium" OR trade_recommendation = "wait_for_confirmation"
+
+Shorter message:
+
+
+text
+⚡ NAS100 POTENTIAL SETUP (Medium Confidence)
+
+{setup_type} | {setup_direction}
+Entry: {entry_price} | Stop: {stop_loss}
+R:R = 1:{reward_risk_ratio}
+
+⚠️ Wait for confirmation before entry
+Confidence: {confidence_score}%
+
+📷 Screenshot attached
+Type 3: Daily Summary (End of Trading Day - 12:00 PM EST)
+
+
+text
+📊 NAS100 DAILY ANALYSIS SUMMARY
+📅 {date}
+
+🔍 Total Scans: {scan_count}
+✅ Valid Setups: {valid_setup_count}
+⭐ High-Quality: {high_quality_count}
+📈 Trending: {trending_count} | 📊 Ranging: {ranging_count}
+
+Setup Breakdown:
+• Opening Range Breakouts: {or_count}
+• Structure Breaks: {structure_count}
+• Mean Reversions: {mr_count}
+
+Avg Confidence: {avg_confidence}%
+Avg R:R: 1:{avg_rr}
+
+{if trades taken:}
+💼 Trades Executed Today: {trade_count}
+💰 P&L: ${daily_pnl} ({daily_r_multiple}R)
+Type 4: Weekly Performance Report (Every Sunday 6:00 PM EST)
+
+
+text
+📈 WEEKLY NAS100 STRATEGY REPORT
+📅 Week of {start_date} to {end_date}
+
+📊 SETUP STATISTICS:
+• Total Valid Setups: {total_setups}
+• High-Quality Setups: {hq_setups}
+• Setups Per Week: {setups_per_week} (Target: 3-8)
+
+🎯 SETUP TYPE DISTRIBUTION:
+• Breakouts: {breakout_pct}%
+• Structure Breaks: {structure_pct}%
+• Mean Reversions: {mr_pct}%
+
+🌐 MARKET REGIME:
+• Trending: {trending_pct}%
+• Ranging: {ranging_pct}%
+
+{if trades executed:}
+💼 TRADING PERFORMANCE:
+• Trades Taken: {trade_count}
+• Win Rate: {win_rate}%
+• Avg R-Multiple: {avg_r}R
+• Profit Factor: {pf}
+• Total P&L: ${weekly_pnl}
+• Longest Win Streak: {win_streak}
+• Longest Loss Streak: {loss_streak}
+
+📉 Best Setup Type: {best_type} ({best_wr}% WR)
+📈 Most Frequent: {frequent_type}
+
+{validation milestone check:}
+✅ Trade Frequency Target Met: {yes/no}
+✅ Setup Quality Consistent: {yes/no}
+⏭️ Next Milestone: {next_step}
+Key Functions
+send_telegram_message(message_text, parse_mode="Markdown")
+
+Use python-telegram-bot library
+
+Send formatted message to configured chat_id
+
+Handle rate limiting (max 1 message per 3 seconds to avoid Telegram blocks)
+
+Include error handling for failed sends
+
+Return success/failure status
+
+send_telegram_photo(image_path, caption)
+
+Send screenshot image with accompanying setup details as caption
+
+Compress image if >5MB (Telegram limit)
+
+Used for high-quality setup alerts with visual confirmation
+
+format_telegram_message(setup_data, message_type)
+
+Take parsed AI response dictionary
+
+Format according to message type template
+
+Apply proper Markdown formatting (bold, italics, emojis)
+
+Return formatted string ready for sending
+
+Component 6: Task Scheduler & Main Execution Loop
+Functionality
+Orchestrate all components, run at scheduled times during trading hours, handle errors gracefully, ensure system resilience.
+
+Scheduling Architecture
+Daily Schedule (Monday-Friday only, holidays auto-detected):
+
+
+text
+09:25 AM EST - Pre-market initialization
+  - Connect to MT5
+  - Test API connections (OpenAI, Telegram)
+  - Load previous day high/low values
+  - Calculate opening balance and risk amount
+  - Send "System Active" Telegram notification
+
+09:30 AM EST - First scan (Session Open)
+09:45 AM EST - Second scan
+10:00 AM EST - Third scan  
+10:15 AM EST - Fourth scan
+10:30 AM EST - Fifth scan
+11:00 AM EST - Sixth scan
+11:30 AM EST - Final scan (End of optimal window)
+
+12:00 PM EST - Daily summary generation and notification
+
+Continuous (every 5 minutes during 9:30-11:30):
+  - Monitor for critical price alerts if setup was identified
+  - Check if MT5 connection still active
+Key Functions
+main_analysis_workflow() (executed at each scheduled time)
+
+
+text
+1. Check current time is valid trading hours
+2. Verify MT5 connection (reconnect if dropped)
+3. Capture screenshot with reference lines
+4. Send screenshot to GPT-4o-mini for analysis
+5. Parse and validate response
+6. Log results to CSV
+7. If high-quality setup detected:
+   - Send Telegram alert with details
+   - Save screenshot to "priority_setups" folder
+8. Handle errors gracefully (log, notify, continue)
+9. Return execution status
+initialize_daily_session()
+
+
+text
+1. Check if today is trading day (Mon-Fri, not US holiday)
+2. Connect to MT5 and verify market open
+3. Pull current account balance from MT5
+4. Calculate risk amount (balance × 0.01)
+5. Get previous day's high/low from daily chart
+6. Initialize VWAP calculation for current session
+7. Test OpenAI API with dummy request
+8. Test Telegram notification
+9. Create daily log folder
+10. Send "System Ready" notification
+11. Return initialization status
+generate_daily_summary()
+
+
+text
+1. Read today's entries from CSV log
+2. Calculate summary statistics
+3. Identify best setup of the day (highest confidence)
+4. Format daily summary message
+5. Send Telegram notification
+6. Save summary to daily_summaries folder
+7. Archive today's screenshots
+generate_weekly_report()
+
+
+text
+1. Read last 7 days from CSV log
+2. Calculate weekly statistics
+3. Evaluate against validation milestones
+4. Check if 3-8 setups/week target met
+5. Analyze setup type performance
+6. Format weekly report message
+7. Send Telegram notification with attached CSV
+8. Update progress tracker
+error_handler(error, context)
+
+
+text
+1. Log error details to error.log file
+2. Classify error severity:
+   - Critical: MT5 disconnection, API key invalid
+   - High: Screenshot capture failed, API timeout
+   - Medium: Parse error, validation failure
+   - Low: Telegram send failed
+3. Take appropriate action:
+   - Critical: Send alert, attempt reconnection, pause system if unresolved
+   - High: Retry operation 3 times, log failure, continue
+   - Medium: Log and continue
+   - Low: Queue for retry, continue
+4. Send error notification to Telegram if severity ≥ High
+5. Return error handling result
+Component 7: Data Analysis & Performance Tracking
+Functionality
+Analyze historical log data to identify which patterns work best, track strategy evolution, support milestone validation decisions.
+
+Key Functions
+analyze_setup_performance(log_file, lookback_days=30)
+
+Filter data by date range
+
+Group by setup_type
+
+Calculate for each type:
+
+Frequency (how often it appears)
+
+Average confidence score
+
+Win rate (if trades executed)
+
+Average R-multiple
+
+Best performing regime for this setup
+
+Generate performance comparison dataframe
+
+Save to CSV: setup_performance_analysis.csv
+
+detect_strategy_decay(log_file, window_size=20)
+
+Calculate rolling win rate and average R over last 20 trades
+
+Compare recent performance (last 10 trades) vs. previous 10 trades
+
+Detect statistical significance of performance change
+
+Alert if recent win rate drops >15% or avg R drops >30%
+
+Send Telegram warning: "Strategy performance declining - review needed"
+
+validate_milestone_progress(log_file, milestone_number)
+
+
+text
+Milestone 1 (Weeks 1-4 Manual Observation):
+- Are 3-8 setups appearing per week? ✓/✗
+- Is average confidence score >60%? ✓/✗
+- Decision: Proceed to Milestone 2 or abandon
+
+Milestone 2 (Weeks 5-8 Micro Live):
+- Have 12-24 trades been executed? ✓/✗
+- Do setups behave as expected (structure holds/breaks logically)? ✓/✗
+- Is slippage <3 ticks average? ✓/✗
+- Decision: Proceed to Milestone 3 or revise
+
+Milestone 3 (Weeks 9+ Full Implementation):
+- Have 30+ trades been executed at 1% risk? ✓/✗
+- Win rate ≥50%? ✓/✗
+- Average R ≥1.5? ✓/✗
+- Profit factor >1.3? ✓/✗
+- Max drawdown <15%? ✓/✗
+- Decision: Continue live trading or pause for analysis
+export_analysis_for_cursor(log_file, output_format="json")
+
+Read entire trading log CSV
+
+Include all fields: setups, outcomes, performance metrics
+
+Calculate aggregate statistics
+
+Export in structured format for AI analysis tools like Cursor
+
+Output formats: JSON, CSV, or formatted text report
+
+Include metadata: date range, total trades, current milestone
+
+Save as: cursor_analysis_export_{date}.json
+
+Component 8: System Monitoring & Health Checks
+Functionality
+Ensure system reliability, detect failures early, maintain uptime during critical trading hours.
+
+Health Check Functions
+check_mt5_connection_health()
+
+Verify MT5 terminal is running
+
+Test data feed is live (recent tick data flowing)
+
+Check symbol availability (NAS100 tradeable)
+
+Measure latency (acceptable if <500ms)
+
+Return health status + details
+
+check_api_health()
+
+Test OpenAI API: send small test request, verify response time
+
+Test Telegram API: send test message
+
+Check remaining API credits/rate limits
+
+Return health status for each service
+
+check_disk_space()
+
+Verify screenshots folder has sufficient space (warn if <1GB remaining)
+
+Check log file size (rotate if >50MB)
+
+Archive old screenshots (>30 days) to compressed folder
+
+system_heartbeat() (runs every 15 minutes during trading hours)
+
+
+text
+1. Run all health checks
+2. If any critical failure detected:
+   - Log error
+   - Send Telegram alert
+   - Attempt auto-recovery
+   - If recovery fails, pause system and notify user
+3. Log heartbeat status to system.log
+4. Return overall system health
+Component 9: Configuration for Cursor AI Integration
+Purpose
+Enable Cursor (or other AI coding assistants) to understand the entire bot architecture, analyze performance, and suggest improvements.
+
+Documentation Export Function
+generate_system_documentation_for_ai()
+Creates a comprehensive JSON file containing:
+
+
+json
+{
+  "system_overview": {
+    "purpose": "Automated NAS100 pattern tracking with GPT-4o-mini analysis",
+    "trading_hours": "9:30 AM - 11:30 AM EST, Mon-Fri",
+    "target_frequency": "3-8 quality setups per week",
+    "risk_per_trade": "1% of account balance",
+    "current_milestone": "Milestone 1 - Manual Observation Phase"
+  },
+  
+  "file_structure": {
+    "main_script": "main.py",
+    "config_file": "config.yaml",
+    "modules": [
+      "mt5_connection.py",
+      "gpt_analysis.py",
+      "telegram_notifications.py",
+      "data_logging.py",
+      "scheduler.py",
+      "performance_analysis.py"
+    ],
+    "data_files": {
+      "trading_log": "trading_log.csv",
+      "error_log": "error.log",
+      "system_log": "system.log",
+      "screenshots": "./screenshots/",
+      "summaries": "./daily_summaries/"
+    }
+  },
+  
+  "strategy_rules": {
+    "entry_conditions": [...],
+    "stop_loss_logic": [...],
+    "take_profit_logic": [...],
+    "position_sizing": "formula explanation",
+    "regime_detection": "method explanation"
+  },
+  
+  "performance_data": {
+    "total_setups_logged": 0,
+    "valid_setups": 0,
+    "trades_executed": 0,
+    "current_win_rate": null,
+    "average_r_multiple": null,
+    "setup_type_distribution": {},
+    "regime_distribution": {},
+    "best_performing_setup": null
+  },
+  
+  "api_usage": {
+    "openai_calls_total": 0,
+    "openai_cost_total": 0.00,
+    "avg_cost_per_analysis": 0.00015,
+    "telegram_messages_sent": 0
+  },
+  
+  "system_health": {
+    "mt5_connection_status": "healthy",
+    "openai_api_status": "healthy",
+    "telegram_api_status": "healthy",
+    "last_successful_scan": "timestamp",
+    "total_errors_logged": 0,
+    "critical_errors": 0
+  },
+  
+  "prompts_used": {
+    "gpt4_system_prompt": "full text",
+    "gpt4_user_prompt_template": "full text with placeholders"
+  },
+  
+  "improvement_suggestions": [
+    "Areas where AI assistant can help optimize",
+    "Known issues or limitations",
+    "Planned enhancements"
+  ]
+}
+Usage: Export this file before asking Cursor to analyze or modify the system. Cursor can then understand the full context and make intelligent suggestions.
+
+Complete Execution Flow Summary
+Daily Workflow
+
+text
+09:25 AM → System initialization
+         → Connect MT5, test APIs
+         → Load market data
+         → Send "System Ready" notification
+
+09:30 AM → First chart capture
+         → GPT-4o-mini analysis
+         → Log results
+         → Send alert if high-quality setup
+
+[Repeat every 15-30 minutes until 11:30 AM]
+
+12:00 PM → Generate daily summary
+         → Calculate statistics
+         → Send Telegram summary
+         → Archive data
+
+[System idle until next trading day]
+
+Sunday 6:00 PM → Generate weekly report
+                → Evaluate milestone progress
+                → Send performance summary
+Error Recovery Flow
+
+text
+Error Detected → Classify severity
+              → Log to error.log
+              → Attempt auto-recovery
+              → If critical: send Telegram alert
+              → If unrecoverable: pause system + manual intervention notification
+              → If recoverable: retry + continue
+File Structure for Cursor
+
+text
+/nas100_trading_bot/
+│
+├── main.py                          # Main execution script
+├── config.yaml                      # Configuration file
+├── requirements.txt                 # Python dependencies
+├── .env                            # API keys (gitignored)
+│
+├── /modules/
+│   ├── mt5_connection.py           # MT5 API integration
+│   ├── gpt_analysis.py             # GPT-4o-mini vision analysis
+│   ├── telegram_bot.py             # Telegram notifications
+│   ├── data_logger.py              # CSV logging functions
+│   ├── scheduler.py                # Task scheduling
+│   ├── performance_analyzer.py     # Performance tracking
+│   ├── error_handler.py            # Error management
+│   └── health_monitor.py           # System health checks
+│
+├── /data/
+│   ├── trading_log.csv             # Main trading log
+│   ├── error.log                   # Error log
+│   ├── system.log                  # System events log
+│   └── /daily_summaries/           # Daily summary reports
+│
+├── /screenshots/
+│   └── /YYYY-MM-DD/                # Daily screenshot folders
+│
+├── /exports/
+│   └── cursor_analysis_export.json # Data export for AI analysis
+│
+└── /docs/
+    ├── strategy_reference.md       # Full strategy documentation
+    ├── api_documentation.md        # API usage guide
+    └── system_architecture.md      # Technical architecture
+Key Optimizations for Cursor Development
+1. Modular Code Structure
+Each component (MT5, GPT-4o-mini, Telegram, logging) should be a separate module with clear interfaces. This allows Cursor to work on individual components without breaking others.
+
+2. Comprehensive Docstrings
+Every function should have detailed docstrings explaining:
+
+Purpose
+
+Parameters with types
+
+Return values with types
+
+Example usage
+
+Error cases handled
+
+Cursor can read these and understand how to modify or extend functionality.
+
+3. Type Hints Throughout
+Use Python type hints for all function parameters and returns. This helps Cursor understand expected data structures and catch errors during code generation.
+
+4. Configuration-Driven Logic
+All strategy parameters, thresholds, and settings in config.yaml—not hardcoded. Cursor can suggest config changes without touching core logic.
+
+5. Extensive Logging
+Log every decision point:
+
+"Regime detected as trending_up because..."
+
+"Setup rejected because reward:risk = 1.2 (below 1.5 threshold)"
+
+"Position size calculated: 12 contracts based on 15-tick stop"
+
+This creates an audit trail Cursor can analyze to understand system behavior.
+
+6. Unit Tests for Core Functions
+Write tests for:
+
+GPT-4o-mini response parsing
+
+Position size calculation
+
+Setup validation logic
+
+CSV logging
+
+Cursor can run tests to verify modifications don't break existing functionality.
+
+Cost Estimation
+OpenAI GPT-4o-mini Vision API:
+
+7 scans per day × 5 days = 35 scans/week
+
+35 × $0.00015 = $0.00525/week or ~$0.27/month
+helicone
+​
+
+Telegram Bot API:
+
+Completely free, no usage limits for personal use
+
+MT5 API:
+
+Free (built into MT5 platform)
+
+Total Monthly Cost: ~$0.30 (essentially free compared to subscription platforms charging $50-200/month)
+
+Next Steps for Implementation with Cursor
+Phase 1: Build MT5 connection + screenshot capture module first (test independently)
+
+Phase 2: Integrate GPT-4o-mini analysis with test screenshots (verify prompt quality)
+
+Phase 3: Add CSV logging and data persistence
+
+Phase 4: Implement Telegram notifications
+
+Phase 5: Add scheduler for automated execution
+
+Phase 6: Implement performance tracking and milestone validation
+
+Phase 7: Add health monitoring and error recovery
+
+Phase 8: Create Cursor analysis export functionality
+
+Each phase should be fully tested before proceeding to the next. Cursor can help generate code for each phase sequentially, using the previous phases as context.
+
+
+StructureScout Professional Trading System - Phase Transition & Live Trading Module
+Component 10: Milestone Progression & Mode Switching
+System Modes Configuration
+
+text
+SYSTEM_MODE:
+  current_mode: "observation"  # observation | paper_trading | micro_live | full_live
+  mode_start_date: "2026-01-13"
+  auto_advance_milestones: false  # Require manual approval to advance
+  
+MILESTONE_SCHEDULE:
+  observation_phase:
+    duration_weeks: 4
+    min_setups_required: 12  # Minimum 3/week × 4 weeks
+    required_confidence_avg: 60
+    auto_advance: false
+    
+  paper_trading_phase:
+    duration_weeks: 2
+    min_trades_required: 6
+    required_setup_accuracy: 70  # % of setups that behaved as expected
+    auto_advance: false
+    
+  micro_live_phase:
+    duration_weeks: 4
+    min_trades_required: 12
+    max_position_size: 2  # Override 1% calc, use fixed 2 micro contracts
+    required_win_rate: 45  # Minimum to advance
+    max_drawdown_pct: 10
+    auto_advance: false
+    
+  full_live_phase:
+    activated: false
+    use_full_position_sizing: true
+    risk_per_trade: 0.01  # 1% of account
+    max_daily_trades: 3
+    max_weekly_trades: 12
+    daily_loss_limit_pct: 3  # Stop trading if down 3% in a day
+    weekly_loss_limit_pct: 6  # Stop trading if down 6% in a week
+
+LIVE_TRADING_SETTINGS:
+  enable_auto_execution: false  # When true, bot executes trades automatically
+  execution_mode: "alert_only"  # alert_only | semi_auto | fully_auto
+  require_manual_confirmation: true
+  confirmation_timeout_seconds: 300  # 5 minutes to confirm via Telegram
+Component 11: Economic News Calendar Integration
+News Avoidance System
+Purpose: Prevent trading during high-impact news releases that cause erratic price behavior and invalidate structure-based setups.
+ninjatrader
+​
+
+Key Functions
+fetch_daily_economic_calendar(date)
+
+
+text
+Uses free API (Trading Economics, Investing.com, or ForexFactory)
+- Fetches all scheduled economic events for specified date
+- Filters for USD-impacting events (affects NAS100)
+- Classifies by impact level: high, medium, low
+- Returns list of news events with times (EST timezone)
+identify_news_blackout_periods(events_list)
+
+
+text
+For each HIGH-IMPACT event:
+- Creates blackout window: 15 min before event, 30 min after event
+- Examples of high-impact events:
+  - FOMC announcements (2:00 PM EST typically)
+  - Non-Farm Payrolls (8:30 AM EST first Friday of month)
+  - CPI/Inflation data (8:30 AM EST)
+  - Fed Chair speeches
+  - GDP releases
+  
+Returns: List of time ranges to avoid trading
+Example: [(08:15-09:00 EST), (14:00-14:45 EST)]
+is_trading_allowed_now(current_time, blackout_periods)
+
+
+text
+Checks if current time falls within any blackout window
+Returns: Boolean (True = safe to trade, False = avoid)
+
+If False, logs reason: "Trading paused: NFP release at 8:30 AM"
+get_weekly_news_calendar()
+
+
+text
+Fetches entire week's high-impact events on Sunday evening
+Sends Telegram summary:
+
+📰 HIGH-IMPACT NEWS THIS WEEK:
+Monday: None
+Tuesday: CPI Data (8:30 AM EST) - Avoid 8:15-9:00 AM
+Wednesday: FOMC Minutes (2:00 PM EST) - Avoid 1:45-2:30 PM  
+Thursday: None
+Friday: NFP (8:30 AM EST) - Avoid 8:15-9:00 AM
+
+🚫 Total Blackout Periods: 3
+✅ Safe Trading Windows: Normal hours outside these times
+Component 12: Weekend & Holiday Detection
+Trading Calendar System
+is_market_open(date_time)
+
+
+text
+Checks:
+1. Is it Monday-Friday? (No weekend trading)
+2. Is it a US market holiday? (NYSE closed = NAS100 closed)
+3. Is current time within 9:30 AM - 11:30 AM EST? (Trading window)
+
+US Market Holidays 2026:
+- New Year's Day: Jan 1
+- MLK Day: Jan 19
+- Presidents Day: Feb 16
+- Good Friday: Apr 10
+- Memorial Day: May 25
+- Juneteenth: Jun 19
+- Independence Day: Jul 3 (observed)
+- Labor Day: Sep 7
+- Thanksgiving: Nov 26
+- Christmas: Dec 25
+
+Returns: Boolean + reason if closed
+Example: (False, "Market closed for Presidents Day")
+calculate_next_trading_session(current_datetime)
+
+
+text
+If called on Friday at 1:00 PM:
+- Returns: Monday 9:30 AM EST
+
+If called on holiday:
+- Returns: Next business day 9:30 AM EST
+
+Used for logging: "Next scan scheduled: Monday Jan 13, 9:30 AM EST"
+Component 13: Mode Transition & Milestone Validator
+Core Logic
+check_milestone_completion(current_mode)
+
+
+text
+OBSERVATION PHASE (Weeks 1-4):
+- Calculate weeks elapsed since mode_start_date
+- Count total valid setups logged
+- Calculate average confidence score
+- Check requirements:
+  ✓ 4 weeks completed?
+  ✓ Minimum 12 setups identified? (3/week target)
+  ✓ Average confidence ≥60%?
+  ✓ Setups appeared consistently (not all in week 1, none after)?
+
+If all pass:
+- Send Telegram notification: "🎉 OBSERVATION PHASE COMPLETE"
+- Include summary stats
+- Prompt: "Reply 'ADVANCE' to begin Paper Trading Phase"
+  
+If fail:
+- Send detailed report of what's missing
+- Recommend: Continue observation or abandon strategy
+advance_to_next_phase(confirmation_code)
+
+
+text
+Requires manual confirmation code sent via Telegram
+- Validates user sent correct code ("ADVANCE" or unique PIN)
+- Updates config: current_mode = next phase
+- Resets phase counters (trade count, start date)
+- Logs milestone transition in system log
+- Sends confirmation: "✅ NOW IN PAPER TRADING MODE"
+- Updates risk rules based on new phase
+Milestone Decision Logic:
+
+
+python
+if observation_phase_complete:
+    if setup_frequency >= 3_per_week AND avg_confidence >= 60:
+        recommendation = "ADVANCE to Paper Trading"
+    else:
+        recommendation = "EXTEND observation 2 more weeks or ABANDON"
+        
+if paper_trading_complete:
+    if setup_accuracy >= 70:  # Did setups behave as AI predicted?
+        recommendation = "ADVANCE to Micro Live"
+    else:
+        recommendation = "REVISIT strategy rules or ABANDON"
+        
+if micro_live_complete:
+    if win_rate >= 45 AND drawdown < 10:
+        recommendation = "ADVANCE to Full Live Trading"
+    else:
+        recommendation = "CONTINUE micro live or REVISE strategy"
+Component 14: Live Trade Execution Engine
+Execution Modes
+Mode 1: Alert Only (Observation & Paper Trading)
+
+
+text
+When valid setup detected:
+1. Log to CSV with all details
+2. Send Telegram alert with entry/stop/target
+3. Take NO action in MT5
+4. User manually tracks outcome and updates CSV
+Mode 2: Semi-Automatic (Micro Live & Full Live - Default)
+
+
+text
+When valid setup detected:
+1. Send Telegram alert with full details
+2. Include inline buttons: [✅ EXECUTE] [❌ SKIP] [⏸️ PAUSE BOT]
+3. Wait for user confirmation (5-minute timeout)
+4. If [EXECUTE] clicked within timeout:
+   - Calculate position size based on current mode
+   - Place market order via MT5 API
+   - Set stop loss and take profit orders
+   - Send confirmation: "Trade executed: Long 8 contracts @ 21,245"
+5. If timeout expires: Log as "missed_opportunity"
+Mode 3: Fully Automatic (Advanced - Requires explicit enable)
+
+
+text
+When valid setup detected AND all filters pass:
+1. Automatically calculate position size
+2. Execute trade via MT5 without confirmation
+3. Set SL/TP orders
+4. Send Telegram notification: "AUTO-EXECUTED: Long 12 contracts"
+5. Monitor position and send updates at TP1/SL hit
+
+Additional Safety: Requires daily_loss_limit and max_trades_per_day active
+Key Execution Functions
+execute_trade_via_mt5(setup_data, position_size)
+
+
+text
+Parameters from setup_data:
+- symbol: "NAS100" or broker-specific symbol
+- direction: "buy" or "sell"
+- entry_price: current market price (or limit if specified)
+- stop_loss: price level for SL order
+- take_profit_1: price level for first TP (50% position)
+- take_profit_2: trailing stop logic for remaining 50%
+- position_size: number of contracts (micro/mini/standard)
+
+Execution Steps:
+1. Verify MT5 connection active
+2. Check account balance sufficient for margin
+3. Verify market is open and tradeable
+4. Place market order (or limit order if price not ideal)
+5. Immediately place SL order (guaranteed stop)
+6. Place TP order for 50% of position at TP1 level
+7. Set up trailing stop logic for remaining 50%
+8. Log trade ID, fill price, actual slippage
+9. Return execution result (success/fail + details)
+
+Error Handling:
+- Insufficient margin: Alert user, cancel trade
+- Order rejected: Log reason, retry once, alert user
+- Slippage >5 ticks: Alert user, log as "poor_fill"
+- Connection lost: Retry 3 times, alert user if persistent
+monitor_open_positions()
+
+
+text
+Runs every 30 seconds when positions are open
+
+For each open trade:
+1. Check if TP1 hit (50% target reached)
+   - If yes: Close 50% of position
+   - Move SL to breakeven on remaining 50%
+   - Send Telegram: "🎯 TP1 HIT: +$125 (1.8R) - Position 50% closed, SL moved to BE"
+
+2. Check if SL hit (stop loss triggered)
+   - Log as loss, calculate R-multiple
+   - Send Telegram: "🛑 STOP HIT: -$50 (1R loss)"
+   - Update CSV with outcome
+
+3. For remaining 50% after TP1:
+   - Trail stop below each new higher low (long) / above lower high (short)
+   - When trailing stop hit: Close remaining position
+   - Send final P&L summary
+
+4. Maximum hold time check (3 hours):
+   - If position still open after 3 hours: close manually
+   - Send alert: "Position closed at time limit: +$XX"
+check_daily_risk_limits()
+
+
+text
+Before executing any new trade:
+
+1. Count trades today (max 3 per day in full_live mode)
+2. Calculate P&L today
+3. If daily_loss_limit breached (-3% of account):
+   - HALT all trading for rest of day
+   - Send Telegram: "🚨 DAILY LOSS LIMIT HIT: -$150 (-3%) - Trading paused until tomorrow"
+   - Log incident to risk_log.csv
+   - Return False (block trade execution)
+
+4. Check weekly P&L
+5. If weekly_loss_limit breached (-6%):
+   - HALT trading for rest of week
+   - Send critical alert: "⛔ WEEKLY LOSS LIMIT HIT - System paused, manual review required"
+   
+Returns: Boolean (True = can trade, False = limits breached)
+Component 15: Professional Risk Management Module
+Dynamic Position Sizing
+calculate_position_size(mode, stop_distance_ticks, account_balance)
+
+
+text
+OBSERVATION & PAPER TRADING:
+- Return 0 (no actual position)
+
+MICRO LIVE:
+- Ignore 1% calculation
+- Return fixed 2 micro contracts
+- Purpose: Minimize risk while validating execution quality
+
+FULL LIVE:
+- risk_amount = account_balance × 0.01  # 1% of account
+- point_value = 0.25  # NAS100 micro contract
+- dollar_risk_per_contract = stop_distance_ticks × point_value
+- position_size = risk_amount / dollar_risk_per_contract
+- Round down to whole contracts
+- Apply max position limit if configured
+  
+Example:
+Account: $5,000
+Stop: 20 ticks away
+Risk: $50 (1%)
+Per contract risk: 20 × $0.25 = $5
+Position: $50 / $5 = 10 micro contracts
+
+Returns: Integer (number of contracts)
+validate_margin_requirements(position_size, symbol)
+
+
+text
+Query MT5 for:
+- Current margin requirement for symbol
+- Available free margin in account
+- Calculate: required_margin = position_size × margin_per_contract
+
+If required_margin > free_margin × 0.8:  # Keep 20% buffer
+- Reduce position size to fit available margin
+- Alert user: "Position reduced to X contracts due to margin"
+  
+If still insufficient:
+- Block trade execution
+- Alert: "Insufficient margin - trade cancelled"
+  
+Returns: (adjusted_position_size, can_trade_boolean)
+apply_correlation_limits(new_trade_direction)
+
+
+text
+Advanced feature: Prevent over-concentration
+
+If already holding NAS100 long position:
+- Block additional long entries (no pyramiding)
+- Allow short entries (hedging acceptable)
+  
+If already at max_positions (3 simultaneous trades):
+- Block new entries regardless of direction
+- Alert: "Max position count reached - waiting for close"
+
+Returns: Boolean (allow_trade)
+Component 16: Advanced Logging & Audit Trail
+Trade Execution Log (trade_execution.csv)
+Columns:
+
+
+text
+trade_id, timestamp, mode, setup_type, direction,
+entry_price, entry_time_actual, slippage_ticks,
+position_size, stop_loss, take_profit_1, take_profit_2,
+risk_amount, reward_target_1, reward_target_2,
+tp1_hit_time, tp1_exit_price, tp1_profit,
+final_exit_time, final_exit_price, final_profit,
+total_pnl, r_multiple, hold_duration_minutes,
+exit_reason (tp1_partial/tp2_full/stop_loss/manual/time_limit),
+news_event_nearby (yes/no), market_regime, ai_confidence,
+execution_quality (excellent/good/fair/poor),
+notes
+log_trade_execution(trade_details)
+
+Appends row with all trade data
+
+Includes pre-trade AI analysis for comparison
+
+Tracks execution quality (slippage vs expected)
+
+Links to screenshot of chart at entry time
+
+log_trade_outcome(trade_id, outcome_data)
+
+Updates row when trade closes
+
+Calculates actual R-multiple vs predicted
+
+Compares AI's target levels to actual price action
+
+Flags discrepancies for analysis
+
+Component 17: System State Manager
+State Persistence
+save_system_state(state_dict)
+
+
+text
+Saves current system state to JSON file:
+
+{
+  "last_updated": "2026-01-13 10:45:32 EST",
+  "current_mode": "micro_live",
+  "mode_start_date": "2026-01-10",
+  "trades_this_phase": 8,
+  "open_positions": [
+    {
+      "trade_id": "20260113_001",
+      "symbol": "NAS100",
+      "direction": "long",
+      "position_size": 2,
+      "entry_price": 21245,
+      "stop_loss": 21230,
+      "take_profit_1": 21275,
+      "entry_time": "2026-01-13 10:15:00"
+    }
+  ],
+  "daily_pnl": -12.50,
+  "weekly_pnl": 87.25,
+  "trades_today": 2,
+  "daily_loss_limit_hit": false,
+  "last_scan_time": "2026-01-13 10:30:00",
+  "next_news_blackout": "2026-01-14 14:00:00",
+  "system_status": "active"
+}
+
+Used for recovery if script restarts or crashes
+load_system_state()
+
+
+text
+On bot startup:
+1. Check if state file exists
+2. Load previous state
+3. Reconcile with MT5 (verify open positions still exist)
+4. Resume monitoring any open trades
+5. Check if mode should have advanced (missed milestone)
+6. Send Telegram: "System restarted - recovered state from 10:45 AM"
+Component 18: Mode-Specific Behavior Matrix
+
+python
+MODE_BEHAVIORS = {
+    "observation": {
+        "capture_screenshots": True,
+        "analyze_with_gpt4": True,
+        "log_setups": True,
+        "send_alerts": True,
+        "execute_trades": False,
+        "track_outcomes": "manual",  # User updates CSV
+        "position_size": 0,
+        "telegram_alert_level": "all_valid_setups"
+    },
+    
+    "paper_trading": {
+        "capture_screenshots": True,
+        "analyze_with_gpt4": True,
+        "log_setups": True,
+        "send_alerts": True,
+        "execute_trades": False,
+        "track_outcomes": "simulated",  # Bot tracks as if traded
+        "position_size": "calculated_but_not_executed",
+        "telegram_alert_level": "high_quality_only",
+        "compare_ai_prediction_to_actual": True  # Track accuracy
+    },
+    
+    "micro_live": {
+        "capture_screenshots": True,
+        "analyze_with_gpt4": True,
+        "log_setups": True,
+        "send_alerts": True,
+        "execute_trades": True,
+        "execution_mode": "semi_auto",  # Requires confirmation
+        "track_outcomes": "actual",
+        "position_size": 2,  # Fixed micro contracts
+        "telegram_alert_level": "high_quality_only",
+        "apply_news_filter": True,
+        "apply_risk_limits": True
+    },
+    
+    "full_live": {
+        "capture_screenshots": True,
+        "analyze_with_gpt4": True,
+        "log_setups": True,
+        "send_alerts": True,
+        "execute_trades": True,
+        "execution_mode": "semi_auto",  # Can upgrade to fully_auto
+        "track_outcomes": "actual",
+        "position_size": "calculated_1pct",
+        "telegram_alert_level": "high_quality_only",
+        "apply_news_filter": True,
+        "apply_risk_limits": True,
+        "apply_correlation_limits": True,
+        "daily_loss_limit": 0.03,
+        "weekly_loss_limit": 0.06,
+        "max_trades_per_day": 3
+    }
+}
+Integration: Main Workflow With Mode Switching
+main_trading_workflow() (Enhanced Version)
+
+
+text
+1. STARTUP CHECKS:
+   - Load system state from previous session
+   - Verify current mode from config
+   - Check if today is trading day (no weekends)
+   - Check if market open (no holidays)
+   - Fetch today's economic calendar
+   - Identify news blackout periods
+   - Send startup notification with mode status
+
+2. PRE-SCAN VALIDATION:
+   - Is current time in trading window (9:30-11:30 AM EST)?
+   - Is current time in news blackout period?
+   - Are daily/weekly risk limits breached?
+   - If any fail: Skip scan, log reason, schedule next
+
+3. MARKET ANALYSIS:
+   - Connect to MT5
+   - Capture chart screenshot with reference lines
+   - Send to GPT-4o-mini for analysis
+   - Parse AI response
+
+4. MODE-SPECIFIC ACTION:
+   
+   IF mode == "observation":
+      - Log setup to CSV
+      - Send Telegram alert if valid setup
+      - No trade execution
+      - Prompt user to manually track outcome
+      
+   IF mode == "paper_trading":
+      - Log setup to CSV
+      - Simulate position sizing
+      - Track setup outcome automatically
+      - Compare AI prediction to actual price action
+      - Update accuracy metrics
+      
+   IF mode == "micro_live" OR "full_live":
+      - Log setup to CSV
+      - Check news filter (skip if near event)
+      - Check risk limits (skip if breached)
+      - Calculate position size (mode-specific)
+      - Validate margin requirements
+      - Send Telegram alert with execution buttons
+      - If confirmed: Execute trade via MT5
+      - Monitor position continuously
+      - Apply trailing stops and exits
+
+5. POST-SCAN TASKS:
+   - Save system state
+   - Check for open positions needing management
+   - Update daily/weekly P&L totals
+   - Check milestone progress
+   - Schedule next scan
+
+6. END-OF-DAY TASKS (12:00 PM):
+   - Generate daily summary
+   - Close any remaining open positions
+   - Check if milestone complete
+   - Send performance report
+   - Archive data
+
+7. END-OF-WEEK TASKS (Sunday 6 PM):
+   - Generate weekly report
+   - Evaluate milestone criteria
+   - Send advancement recommendation if criteria met
+   - Fetch next week's economic calendar
+Telegram Command Interface for Mode Control
+User Commands:
+
+
+text
+/status - Show current mode, trades today, P&L, open positions
+/mode - Display current mode and progress toward milestone
+/advance - Initiate mode advancement (if milestone complete)
+/pause - Pause bot (stops all scanning and trading)
+/resume - Resume bot operation
+/limits - Show current daily/weekly P&L vs limits
+/calendar - Show this week's news blackout periods
+/force_close - Manually close all open positions (emergency)
+/log [date] - Get detailed log for specific date
+/performance - Get performance stats for current phase
+Implementation:
+
+
+python
+def handle_telegram_command(command, user_id):
+    # Verify user_id matches authorized user (security)
+    
+    if command == "/status":
+        return get_system_status_message()
+    
+    elif command == "/advance":
+        milestone_status = check_milestone_completion()
+        if milestone_status["complete"]:
+            return "Milestone complete! Reply CONFIRM_ADVANCE to proceed"
+        else:
+            return f"Milestone not complete: {milestone_status['missing']}"
+    
+    elif command == "CONFIRM_ADVANCE":
+        advance_to_next_phase()
+        return f"✅ Advanced to {new_mode}. System restarting..."
+    
+    # ... implement other commands
+This professional system architecture gives you:
+
+✅ Safe progression through validation phases with manual gates
+✅ News avoidance to prevent trading during volatile events
+✅ Weekend/holiday detection for automatic scheduling
+✅ Multi-level risk limits (daily, weekly, position-level)
+✅ Execution quality tracking (slippage, fill accuracy)
+✅ State persistence for crash recovery
+✅ Telegram control for remote management
+✅ Audit trail for every decision and trade
