@@ -1,0 +1,219 @@
+# StructureScout Trading Bot - System Configuration
+# This file contains non-sensitive configuration settings.
+# Sensitive credentials are stored in .env file (not committed to git).
+
+# =============================================================================
+# System Mode Configuration
+# =============================================================================
+system:
+  current_mode: "observation"  # observation | paper_trading | micro_live | full_live
+  mode_start_date: null  # Set when mode begins (YYYY-MM-DD)
+  auto_advance_milestones: false  # Require manual approval
+  environment: "development"  # development | production
+
+# =============================================================================
+# Trading Hours and Scheduling
+# =============================================================================
+trading_hours:
+  timezone: "America/New_York"  # EST/EDT timezone
+  start_time: "09:30"  # Market open time
+  end_time: "11:30"  # End of optimal trading window
+  days: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
+  
+  # Scan times during trading window (EST)
+  scan_schedule:
+    - "09:30"
+    - "09:45"
+    - "10:00"
+    - "10:15"
+    - "10:30"
+    - "11:00"
+    - "11:30"
+
+# =============================================================================
+# Symbol and Chart Configuration
+# =============================================================================
+trading:
+  symbol: "NAS100"  # Or broker-specific symbol
+  timeframe: "M5"  # 5-minute charts
+  screenshot_width: 1920
+  screenshot_height: 1080
+
+# =============================================================================
+# Risk Management Settings
+# =============================================================================
+risk_management:
+  # Position sizing
+  risk_per_trade: 0.01  # 1% of account per trade
+  point_value: 0.25  # For NAS100 micro contracts
+  
+  # Daily limits
+  daily_loss_limit: 0.03  # 3% daily loss limit
+  max_trades_per_day: 3
+  
+  # Weekly limits
+  weekly_loss_limit: 0.06  # 6% weekly loss limit
+  max_trades_per_week: 12
+  
+  # Position limits
+  max_simultaneous_positions: 3
+  allow_pyramiding: false  # No adding to winning positions
+
+# =============================================================================
+# OpenAI GPT-4o-mini Configuration
+# =============================================================================
+openai:
+  model: "gpt-4o-mini"
+  max_tokens: 800
+  temperature: 0.3
+  image_detail: "high"
+  timeout: 30  # seconds
+
+# =============================================================================
+# Setup Validation Filters
+# =============================================================================
+setup_filters:
+  min_reward_risk_ratio: 1.5  # Minimum R:R ratio
+  min_confidence_score: 65  # Minimum AI confidence %
+  min_stop_distance_ticks: 10  # Minimum stop distance
+  max_stop_distance_ticks: 50  # Maximum stop distance
+
+# =============================================================================
+# Telegram Notification Settings
+# =============================================================================
+telegram:
+  # Alert levels
+  alert_on_all_setups: false  # Only high-quality setups
+  alert_on_high_quality: true
+  alert_on_medium_quality: false
+  alert_on_errors: true
+  
+  # Notification types
+  send_startup_notification: true
+  send_daily_summary: true
+  send_weekly_report: true
+  
+  # Formatting
+  parse_mode: "Markdown"
+  disable_notification: false  # Silent notifications
+
+# =============================================================================
+# Data Storage Configuration
+# =============================================================================
+storage:
+  # File paths
+  trading_log: "data/trading_log.csv"
+  trade_execution_log: "data/trade_execution.csv"
+  error_log: "logs/error.log"
+  system_log: "logs/system.log"
+  risk_log: "logs/risk_log.csv"
+  
+  # Screenshot storage
+  screenshot_folder: "screenshots"
+  screenshot_format: "png"
+  compress_screenshots: true
+  max_screenshot_size_mb: 1
+  
+  # Data retention
+  keep_screenshots_days: 30
+  keep_logs_days: 90
+  archive_old_data: true
+
+# =============================================================================
+# Milestone Progression Configuration
+# =============================================================================
+milestones:
+  observation_phase:
+    duration_weeks: 4
+    min_setups_required: 12
+    required_confidence_avg: 60
+    
+  paper_trading_phase:
+    duration_weeks: 2
+    min_trades_required: 6
+    required_setup_accuracy: 70
+    
+  micro_live_phase:
+    duration_weeks: 4
+    min_trades_required: 12
+    fixed_position_size: 2  # micro contracts
+    required_win_rate: 45
+    max_drawdown_pct: 10
+    
+  full_live_phase:
+    use_full_position_sizing: true
+    daily_loss_limit: 0.03
+    weekly_loss_limit: 0.06
+
+# =============================================================================
+# News Calendar Configuration
+# =============================================================================
+news_calendar:
+  enabled: true
+  # Time windows to avoid around high-impact news
+  blackout_before_minutes: 15
+  blackout_after_minutes: 30
+  
+  # News impact levels to avoid
+  avoid_impact_levels:
+    - "high"
+  
+  # API settings (if using external service)
+  api_provider: "forexfactory"  # or "tradingeconomics"
+  fetch_interval_hours: 24
+
+# =============================================================================
+# System Health Monitoring
+# =============================================================================
+health_monitoring:
+  enabled: true
+  heartbeat_interval_seconds: 900  # 15 minutes
+  
+  # Connection checks
+  check_mt5_connection: true
+  check_openai_api: true
+  check_telegram_api: true
+  
+  # Disk space
+  min_free_space_mb: 1000
+  
+  # Alerts
+  alert_on_critical_error: true
+  alert_on_connection_loss: true
+
+# =============================================================================
+# Development/Testing Settings
+# =============================================================================
+development:
+  # Dry run mode (simulate without real API calls)
+  dry_run: false
+  
+  # Use mock data
+  use_mock_mt5: false
+  use_mock_openai: false
+  use_mock_telegram: false
+  
+  # Testing
+  test_mode: false
+  save_api_responses: false
+
+# =============================================================================
+# Logging Configuration
+# =============================================================================
+logging:
+  level: "INFO"  # DEBUG | INFO | WARNING | ERROR | CRITICAL
+  format: "[%(asctime)s] [%(levelname)s] [%(name)s] %(message)s"
+  date_format: "%Y-%m-%d %H:%M:%S"
+  
+  # File logging
+  log_to_file: true
+  log_file_max_mb: 50
+  log_file_backup_count: 5
+  
+  # Console logging
+  log_to_console: true
+  
+  # Component-specific logging
+  log_api_requests: true
+  log_trade_decisions: true
+  log_all_setups: true

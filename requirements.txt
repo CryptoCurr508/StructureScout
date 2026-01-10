@@ -1,0 +1,47 @@
+# StructureScout Trading Bot - Python Dependencies
+
+# Core Trading Platform
+MetaTrader5>=5.0.45
+
+# AI/ML APIs
+openai>=1.6.0
+
+# Data Processing
+pandas>=2.1.0
+numpy>=1.24.0
+
+# Task Scheduling
+APScheduler>=3.10.4
+
+# Telegram Bot
+python-telegram-bot>=20.7
+
+# Image Processing
+Pillow>=10.1.0
+
+# Timezone Handling
+pytz>=2023.3
+
+# Environment Variables
+python-dotenv>=1.0.0
+
+# Configuration Files
+PyYAML>=6.0.1
+
+# HTTP Requests (for news calendar API)
+requests>=2.31.0
+
+# Testing
+pytest>=7.4.3
+pytest-cov>=4.1.0
+pytest-mock>=3.12.0
+
+# Code Quality
+pylint>=3.0.3
+black>=23.12.0
+mypy>=1.7.1
+
+# Type Hints
+types-pytz>=2023.3
+types-PyYAML>=6.0.12
+types-requests>=2.31.0

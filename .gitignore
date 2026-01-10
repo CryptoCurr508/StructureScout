@@ -1,0 +1,114 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environment
+venv/
+env/
+ENV/
+.venv
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Environment Variables (CRITICAL - Contains API Keys!)
+.env
+.env.local
+.env.*.local
+
+# Trading Data (Contains Account Info)
+data/
+screenshots/
+exports/
+*.csv
+*.log
+*.json.backup
+
+# System State (May contain sensitive info)
+data/system_state.json
+
+# Temporary Files
+*.tmp
+*.temp
+temp/
+tmp/
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Logs
+logs/
+*.log
+error.log
+system.log
+
+# Trading Screenshots
+screenshots/**/*.png
+screenshots/**/*.jpg
+
+# Backup Files
+*.bak
+*.backup
+*~
+
+# Jupyter Notebooks (if used for analysis)
+.ipynb_checkpoints/
+*.ipynb
+
+# PyCharm
+.idea/
+
+# VS Code
+.vscode/
+
+# Coverage Reports
+htmlcov/
+.tox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+
+# MyPy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Project Specific
+# Keep planning docs in git
+!AI_AGENT_CONTEXT.md
+!NEW_AGENT_START_HERE.md
+!CONVERSATION_SUMMARY.md
+!project_state.json
+!StructureScout.txt
+!README.md
+
+# But exclude large generated files
+cursor_analysis_export_*.json
+daily_summaries/
