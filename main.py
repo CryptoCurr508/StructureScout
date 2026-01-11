@@ -130,8 +130,7 @@ class StructureScoutBot:
                 chat_id=self.config.telegram_chat_id,
                 bot_instance=self
             )
-            import asyncio
-            asyncio.run(self.telegram.initialize(enable_commands=True))
+            self.telegram.initialize(enable_commands=True)
             
             # Initialize scheduler
             self.scheduler = TradingScheduler(timezone_str=self.config.timezone)
@@ -302,8 +301,7 @@ Bot is ready to begin trading hours monitoring.
         
         # Shutdown Telegram bot
         if self.telegram:
-            import asyncio
-            asyncio.run(self.telegram.shutdown())
+            self.telegram.shutdown()
         
         # Disconnect MT5
         if self.mt5_connection:

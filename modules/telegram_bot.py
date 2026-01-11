@@ -13,6 +13,7 @@ from typing import Optional, Dict, Any
 from telegram import Bot, Update
 from telegram.ext import Application, CommandHandler, ContextTypes
 import asyncio
+import threading
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -46,8 +47,10 @@ class TelegramNotifier:
         self.application = None
         self.initialized = False
         self.bot_instance = bot_instance
+        self.polling_thread = None
+        self.event_loop = None
     
-    async def initialize(self, enable_commands: bool = True) -> bool:
+    def initialize(self, enable_commands: bool = True) -> bool:
         """
         Initialize bot connection and verify credentials.
         
@@ -61,8 +64,10 @@ class TelegramNotifier:
             TelegramBotError: If initialization fails
         """
         try:
-            # Test bot connection
-            bot_info = await self.bot.get_me()
+            # Test bot connection (sync)
+            loop = asyncio.new_event_loop()
+            bot_info = loop.run_until_complete(self.bot.get_me())
+            loop.close()
             logger.info(f"Telegram bot initialized: @{bot_info.username}")
             
             # Set up command handlers if enabled
@@ -78,12 +83,11 @@ class TelegramNotifier:
                 self.application.add_handler(CommandHandler("resume", self._cmd_resume))
                 self.application.add_handler(CommandHandler("help", self._cmd_help))
                 
-                # Start polling in background
-                await self.application.initialize()
-                await self.application.start()
-                await self.application.updater.start_polling()
+                # Start polling in separate thread with its own event loop
+                self.polling_thread = threading.Thread(target=self._run_polling, daemon=True)
+                self.polling_thread.start()
                 
-                logger.info("Telegram command handlers registered and polling started")
+                logger.info("Telegram command handlers registered and polling started in background thread")
             
             self.initialized = True
             return True
@@ -92,6 +96,27 @@ class TelegramNotifier:
             error_msg = f"Failed to initialize Telegram bot: {e}"
             logger.error(error_msg)
             raise TelegramBotError(error_msg)
+    
+    def _run_polling(self):
+        """Run polling in separate thread with its own event loop."""
+        try:
+            # Create new event loop for this thread
+            self.event_loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(self.event_loop)
+            
+            # Initialize and start application
+            self.event_loop.run_until_complete(self.application.initialize())
+            self.event_loop.run_until_complete(self.application.start())
+            self.event_loop.run_until_complete(self.application.updater.start_polling())
+            
+            # Keep the loop running
+            self.event_loop.run_forever()
+            
+        except Exception as e:
+            logger.error(f"Error in polling thread: {e}")
+        finally:
+            if self.event_loop and self.event_loop.is_running():
+                self.event_loop.close()
     
     async def send_message(
         self,
@@ -156,13 +181,26 @@ class TelegramNotifier:
             logger.error(f"Failed to send Telegram photo: {e}")
             return False
     
-    async def shutdown(self) -> None:
+    def shutdown(self) -> None:
         """Shutdown Telegram bot and stop polling."""
-        if self.application:
-            await self.application.updater.stop()
-            await self.application.stop()
-            await self.application.shutdown()
-            logger.info("Telegram bot shutdown complete")
+        try:
+            if self.application and self.event_loop:
+                # Stop polling in the event loop
+                asyncio.run_coroutine_threadsafe(self.application.updater.stop(), self.event_loop)
+                asyncio.run_coroutine_threadsafe(self.application.stop(), self.event_loop)
+                asyncio.run_coroutine_threadsafe(self.application.shutdown(), self.event_loop)
+                
+                # Stop the event loop
+                if self.event_loop.is_running():
+                    self.event_loop.call_soon_threadsafe(self.event_loop.stop)
+                
+                # Wait for thread to finish
+                if self.polling_thread and self.polling_thread.is_alive():
+                    self.polling_thread.join(timeout=5)
+                
+                logger.info("Telegram bot shutdown complete")
+        except Exception as e:
+            logger.error(f"Error during Telegram shutdown: {e}")
     
     # Command Handlers
     
