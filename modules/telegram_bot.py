@@ -28,24 +28,31 @@ class TelegramNotifier:
     Telegram notification manager.
     
     Handles sending messages, photos, and formatted alerts to Telegram.
+    Also handles interactive commands from users.
     """
     
-    def __init__(self, bot_token: str, chat_id: str):
+    def __init__(self, bot_token: str, chat_id: str, bot_instance=None):
         """
         Initialize Telegram notifier.
         
         Args:
             bot_token: Telegram bot token from BotFather
             chat_id: Telegram chat ID to send messages to
+            bot_instance: Reference to main bot instance for commands
         """
         self.bot_token = bot_token
         self.chat_id = chat_id
         self.bot = Bot(token=bot_token)
+        self.application = None
         self.initialized = False
+        self.bot_instance = bot_instance
     
-    async def initialize(self) -> bool:
+    async def initialize(self, enable_commands: bool = True) -> bool:
         """
         Initialize bot connection and verify credentials.
+        
+        Args:
+            enable_commands: Enable command handlers
         
         Returns:
             True if initialization successful
@@ -57,6 +64,27 @@ class TelegramNotifier:
             # Test bot connection
             bot_info = await self.bot.get_me()
             logger.info(f"Telegram bot initialized: @{bot_info.username}")
+            
+            # Set up command handlers if enabled
+            if enable_commands:
+                self.application = Application.builder().token(self.bot_token).build()
+                
+                # Register command handlers
+                self.application.add_handler(CommandHandler("start", self._cmd_start))
+                self.application.add_handler(CommandHandler("status", self._cmd_status))
+                self.application.add_handler(CommandHandler("balance", self._cmd_balance))
+                self.application.add_handler(CommandHandler("today", self._cmd_today))
+                self.application.add_handler(CommandHandler("stop", self._cmd_stop))
+                self.application.add_handler(CommandHandler("resume", self._cmd_resume))
+                self.application.add_handler(CommandHandler("help", self._cmd_help))
+                
+                # Start polling in background
+                await self.application.initialize()
+                await self.application.start()
+                await self.application.updater.start_polling()
+                
+                logger.info("Telegram command handlers registered and polling started")
+            
             self.initialized = True
             return True
             
@@ -127,6 +155,195 @@ class TelegramNotifier:
         except Exception as e:
             logger.error(f"Failed to send Telegram photo: {e}")
             return False
+    
+    async def shutdown(self) -> None:
+        """Shutdown Telegram bot and stop polling."""
+        if self.application:
+            await self.application.updater.stop()
+            await self.application.stop()
+            await self.application.shutdown()
+            logger.info("Telegram bot shutdown complete")
+    
+    # Command Handlers
+    
+    async def _cmd_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        """Handle /start command."""
+        message = """
+🚀 *StructureScout Trading Bot* 🚀
+
+Welcome! I'm your automated NAS100 trading assistant.
+
+*Available Commands:*
+/status - Check bot status
+/balance - View account balance
+/today - Today's trading summary
+/stop - Pause trading
+/resume - Resume trading
+/help - Show this help message
+
+📊 I'll send you alerts for high-quality trading setups during market hours (9:30-11:30 AM EST).
+
+Good luck trading! 📈
+"""
+        await update.message.reply_text(message, parse_mode="Markdown")
+        logger.info(f"User {update.effective_user.id} sent /start command")
+    
+    async def _cmd_status(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        """Handle /status command."""
+        if not self.bot_instance:
+            await update.message.reply_text("❌ Bot instance not available")
+            return
+        
+        try:
+            status = self.bot_instance.get_status()
+            message = f"""
+📊 *StructureScout Status* 📊
+
+🔌 *Connections:*
+• MT5: {status.get('mt5_connected', '❌')}
+• OpenAI: {status.get('openai_available', '❌')}
+• Telegram: ✅ Connected
+
+⚙️ *System:*
+• Mode: {status.get('mode', 'Unknown')}
+• Trading: {status.get('trading_active', '❌')}
+• Symbol: {status.get('symbol', 'N/A')}
+
+📈 *Today:*
+• Scans: {status.get('scans_today', 0)}
+• Valid Setups: {status.get('setups_today', 0)}
+• Trades: {status.get('trades_today', 0)}
+
+⏰ *Next Scan:* {status.get('next_scan', 'N/A')}
+"""
+            await update.message.reply_text(message, parse_mode="Markdown")
+            logger.info(f"User {update.effective_user.id} requested status")
+            
+        except Exception as e:
+            logger.error(f"Error in /status command: {e}")
+            await update.message.reply_text(f"❌ Error getting status: {e}")
+    
+    async def _cmd_balance(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        """Handle /balance command."""
+        if not self.bot_instance:
+            await update.message.reply_text("❌ Bot instance not available")
+            return
+        
+        try:
+            balance_info = self.bot_instance.get_balance()
+            message = f"""
+💰 *Account Balance* 💰
+
+💵 *Balance:* ${balance_info.get('balance', 0):.2f}
+📊 *Equity:* ${balance_info.get('equity', 0):.2f}
+📈 *Profit:* ${balance_info.get('profit', 0):.2f}
+
+💼 *Margin:*
+• Used: ${balance_info.get('margin', 0):.2f}
+• Free: ${balance_info.get('margin_free', 0):.2f}
+• Level: {balance_info.get('margin_level', 0):.2f}%
+
+📊 *Risk Status:*
+• Daily P&L: ${balance_info.get('daily_pnl', 0):.2f}
+• Daily Limit: ${balance_info.get('daily_limit', 0):.2f}
+• Remaining: ${balance_info.get('daily_remaining', 0):.2f}
+"""
+            await update.message.reply_text(message, parse_mode="Markdown")
+            logger.info(f"User {update.effective_user.id} requested balance")
+            
+        except Exception as e:
+            logger.error(f"Error in /balance command: {e}")
+            await update.message.reply_text(f"❌ Error getting balance: {e}")
+    
+    async def _cmd_today(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        """Handle /today command."""
+        if not self.bot_instance:
+            await update.message.reply_text("❌ Bot instance not available")
+            return
+        
+        try:
+            summary = self.bot_instance.get_today_summary()
+            message = format_daily_summary(summary)
+            await update.message.reply_text(message, parse_mode="Markdown")
+            logger.info(f"User {update.effective_user.id} requested today's summary")
+            
+        except Exception as e:
+            logger.error(f"Error in /today command: {e}")
+            await update.message.reply_text(f"❌ Error getting today's summary: {e}")
+    
+    async def _cmd_stop(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        """Handle /stop command."""
+        if not self.bot_instance:
+            await update.message.reply_text("❌ Bot instance not available")
+            return
+        
+        try:
+            self.bot_instance.pause_trading()
+            message = """
+⏸️ *Trading Paused* ⏸️
+
+The bot will stop taking new trades.
+Existing positions will be monitored.
+
+Use /resume to restart trading.
+"""
+            await update.message.reply_text(message, parse_mode="Markdown")
+            logger.info(f"User {update.effective_user.id} paused trading")
+            
+        except Exception as e:
+            logger.error(f"Error in /stop command: {e}")
+            await update.message.reply_text(f"❌ Error pausing trading: {e}")
+    
+    async def _cmd_resume(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        """Handle /resume command."""
+        if not self.bot_instance:
+            await update.message.reply_text("❌ Bot instance not available")
+            return
+        
+        try:
+            self.bot_instance.resume_trading()
+            message = """
+▶️ *Trading Resumed* ▶️
+
+The bot is now actively monitoring for setups.
+Trades will be executed according to your risk parameters.
+
+Use /stop to pause trading.
+"""
+            await update.message.reply_text(message, parse_mode="Markdown")
+            logger.info(f"User {update.effective_user.id} resumed trading")
+            
+        except Exception as e:
+            logger.error(f"Error in /resume command: {e}")
+            await update.message.reply_text(f"❌ Error resuming trading: {e}")
+    
+    async def _cmd_help(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        """Handle /help command."""
+        message = """
+📚 *StructureScout Commands* 📚
+
+*Status & Information:*
+/status - Bot status and connections
+/balance - Account balance and risk
+/today - Today's trading summary
+
+*Control:*
+/stop - Pause trading
+/resume - Resume trading
+/help - Show this help
+
+*Automatic Notifications:*
+• 🚨 High-quality setup alerts
+• 📊 Daily summaries (12:00 PM EST)
+• ⚠️ Error and system alerts
+
+*Trading Hours:*
+9:30 AM - 11:30 AM EST (Mon-Fri)
+
+*Need help?* Contact your administrator.
+"""
+        await update.message.reply_text(message, parse_mode="Markdown")
+        logger.info(f"User {update.effective_user.id} requested help")
 
 
 def format_setup_alert(setup_data: Dict[str, Any], alert_type: str = "high") -> str:

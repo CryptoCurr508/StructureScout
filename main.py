@@ -67,6 +67,12 @@ class StructureScoutBot:
         self.dry_run = dry_run
         self.config = get_config()
         self.running = False
+        self.trading_paused = False
+        
+        # Trading statistics
+        self.scans_today = 0
+        self.setups_today = 0
+        self.trades_today = 0
         
         # Initialize components
         self.mt5_connection: Optional[MT5Connection] = None
@@ -117,14 +123,15 @@ class StructureScoutBot:
                     else:
                         logger.warning(f"Could not auto-detect symbol, using configured: {self.config.trading_symbol}")
             
-            # Initialize Telegram
+            # Initialize Telegram with command handlers
             logger.info("Initializing Telegram bot...")
             self.telegram = TelegramNotifier(
                 bot_token=self.config.telegram_bot_token,
-                chat_id=self.config.telegram_chat_id
+                chat_id=self.config.telegram_chat_id,
+                bot_instance=self
             )
             import asyncio
-            asyncio.run(self.telegram.initialize())
+            asyncio.run(self.telegram.initialize(enable_commands=True))
             
             # Initialize scheduler
             self.scheduler = TradingScheduler(timezone_str=self.config.timezone)
@@ -187,6 +194,14 @@ Bot is ready to begin trading hours monitoring.
         try:
             logger.info("="*60)
             logger.info("Starting analysis workflow...")
+            
+            # Increment scan counter
+            self.scans_today += 1
+            
+            # Check if trading is paused
+            if self.trading_paused:
+                logger.info("Trading is paused by user, skipping scan")
+                return
             
             # Check if we're in trading window
             current_time = datetime.now()
@@ -285,6 +300,11 @@ Bot is ready to begin trading hours monitoring.
         if self.scheduler:
             self.scheduler.stop()
         
+        # Shutdown Telegram bot
+        if self.telegram:
+            import asyncio
+            asyncio.run(self.telegram.shutdown())
+        
         # Disconnect MT5
         if self.mt5_connection:
             self.mt5_connection.disconnect()
@@ -294,6 +314,126 @@ Bot is ready to begin trading hours monitoring.
             self.state_manager.save()
         
         logger.info("StructureScout Bot stopped")
+    
+    # Command handler methods for Telegram
+    
+    def get_status(self) -> Dict[str, Any]:
+        """Get current bot status for /status command."""
+        mt5_status = "✅ Connected" if (self.mt5_connection and self.mt5_connection.is_connected()) else "❌ Disconnected"
+        openai_status = "✅ Available" if self.config.openai_api_key else "❌ Not configured"
+        trading_status = "✅ Active" if (self.running and not self.trading_paused) else "⏸️ Paused" if self.trading_paused else "❌ Stopped"
+        
+        next_scan = "N/A"
+        if self.scheduler:
+            # Get next scheduled job time
+            jobs = self.scheduler.scheduler.get_jobs()
+            if jobs:
+                next_job = min(jobs, key=lambda j: j.next_run_time)
+                next_scan = next_job.next_run_time.strftime("%I:%M %p EST")
+        
+        return {
+            'mt5_connected': mt5_status,
+            'openai_available': openai_status,
+            'mode': self.config.current_mode.title(),
+            'trading_active': trading_status,
+            'symbol': self.config.trading_symbol,
+            'scans_today': self.scans_today,
+            'setups_today': self.setups_today,
+            'trades_today': self.trades_today,
+            'next_scan': next_scan
+        }
+    
+    def get_balance(self) -> Dict[str, Any]:
+        """Get account balance for /balance command."""
+        if not self.mt5_connection or not self.mt5_connection.is_connected():
+            return {
+                'balance': 0,
+                'equity': 0,
+                'profit': 0,
+                'margin': 0,
+                'margin_free': 0,
+                'margin_level': 0,
+                'daily_pnl': 0,
+                'daily_limit': 0,
+                'daily_remaining': 0
+            }
+        
+        account_info = self.mt5_connection.get_account_info()
+        if not account_info:
+            return {}
+        
+        daily_limit = account_info['balance'] * self.config.daily_loss_limit
+        daily_pnl = account_info['profit']
+        daily_remaining = daily_limit - abs(daily_pnl) if daily_pnl < 0 else daily_limit
+        
+        return {
+            'balance': account_info['balance'],
+            'equity': account_info['equity'],
+            'profit': account_info['profit'],
+            'margin': account_info['margin'],
+            'margin_free': account_info['margin_free'],
+            'margin_level': (account_info['equity'] / account_info['margin'] * 100) if account_info['margin'] > 0 else 0,
+            'daily_pnl': daily_pnl,
+            'daily_limit': daily_limit,
+            'daily_remaining': daily_remaining
+        }
+    
+    def get_today_summary(self) -> Dict[str, Any]:
+        """Get today's trading summary for /today command."""
+        log_file = self.config.trading_log_path
+        
+        if not log_file.exists():
+            return {
+                'date': datetime.now().strftime("%Y-%m-%d"),
+                'scan_count': 0,
+                'valid_setup_count': 0,
+                'high_quality_count': 0,
+                'trending_count': 0,
+                'ranging_count': 0,
+                'or_count': 0,
+                'structure_count': 0,
+                'mr_count': 0,
+                'avg_confidence': 0,
+                'avg_rr': 0,
+                'trades_executed': 0,
+                'daily_pnl': 0,
+                'daily_r_multiple': 0
+            }
+        
+        stats = get_weekly_summary_stats(log_file, days=1)
+        
+        return {
+            'date': datetime.now().strftime("%Y-%m-%d"),
+            'scan_count': self.scans_today,
+            'valid_setup_count': self.setups_today,
+            'high_quality_count': stats.get('high_quality_setups', 0),
+            'trending_count': stats.get('trending_count', 0),
+            'ranging_count': stats.get('ranging_count', 0),
+            'or_count': 0,
+            'structure_count': 0,
+            'mr_count': 0,
+            'avg_confidence': stats.get('avg_confidence', 0),
+            'avg_rr': stats.get('avg_rr', 0),
+            'trades_executed': self.trades_today,
+            'daily_pnl': 0,
+            'daily_r_multiple': 0
+        }
+    
+    def pause_trading(self) -> None:
+        """Pause trading (for /stop command)."""
+        self.trading_paused = True
+        logger.info("Trading paused by user command")
+        
+        if self.state_manager:
+            self.state_manager.save()
+    
+    def resume_trading(self) -> None:
+        """Resume trading (for /resume command)."""
+        self.trading_paused = False
+        logger.info("Trading resumed by user command")
+        
+        if self.state_manager:
+            self.state_manager.save()
     
     def generate_daily_summary(self) -> None:
         """Generate and send daily summary."""
