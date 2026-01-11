@@ -234,6 +234,21 @@ Good luck trading! 📈
         
         try:
             status = self.bot_instance.get_status()
+            
+            # Escape special characters for Markdown
+            def escape_md(text):
+                """Escape special Markdown characters."""
+                if not isinstance(text, str):
+                    text = str(text)
+                # Escape underscores, asterisks, and other special chars
+                special_chars = ['_', '*', '[', ']', '(', ')', '~', '`', '>', '#', '+', '-', '=', '|', '{', '}', '.', '!']
+                for char in special_chars:
+                    text = text.replace(char, f'\\{char}')
+                return text
+            
+            symbol = escape_md(status.get('symbol', 'N/A'))
+            next_scan = escape_md(status.get('next_scan', 'N/A'))
+            
             message = f"""
 📊 *StructureScout Status* 📊
 
@@ -245,14 +260,14 @@ Good luck trading! 📈
 ⚙️ *System:*
 • Mode: {status.get('mode', 'Unknown')}
 • Trading: {status.get('trading_active', '❌')}
-• Symbol: {status.get('symbol', 'N/A')}
+• Symbol: {symbol}
 
 📈 *Today:*
 • Scans: {status.get('scans_today', 0)}
 • Valid Setups: {status.get('setups_today', 0)}
 • Trades: {status.get('trades_today', 0)}
 
-⏰ *Next Scan:* {status.get('next_scan', 'N/A')}
+⏰ *Next Scan:* {next_scan}
 """
             await update.message.reply_text(message, parse_mode="Markdown")
             logger.info(f"User {update.effective_user.id} requested status")
