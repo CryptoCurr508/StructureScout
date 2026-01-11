@@ -356,6 +356,49 @@ def save_screenshot_with_metadata(
         return image_path
 
 
+def detect_broker_symbol(base_symbol: str = "NAS100") -> Optional[str]:
+    """
+    Auto-detect broker-specific symbol format.
+    
+    Some brokers use month suffixes like #NAS100_Mar, #NAS100_Jun, etc.
+    This function searches for the correct symbol format in MT5.
+    
+    Args:
+        base_symbol: Base symbol name (e.g., "NAS100")
+        
+    Returns:
+        Detected broker symbol or None if not found
+    """
+    # Get all available symbols
+    symbols = mt5.symbols_get()
+    if symbols is None:
+        logger.error("Failed to get symbols list from MT5")
+        return None
+    
+    # Search for symbols containing the base name
+    matching_symbols = []
+    for symbol in symbols:
+        symbol_name = symbol.name
+        # Check if symbol contains base name (case-insensitive)
+        if base_symbol.upper() in symbol_name.upper():
+            matching_symbols.append(symbol_name)
+            logger.info(f"Found matching symbol: {symbol_name}")
+    
+    if not matching_symbols:
+        logger.error(f"No symbols found matching: {base_symbol}")
+        return None
+    
+    # If exact match exists, use it
+    if base_symbol in matching_symbols:
+        logger.info(f"Using exact match: {base_symbol}")
+        return base_symbol
+    
+    # Otherwise, use the first match (likely with month suffix)
+    detected = matching_symbols[0]
+    logger.info(f"Auto-detected broker symbol: {detected}")
+    return detected
+
+
 def get_previous_day_levels(symbol: str) -> Optional[Dict[str, float]]:
     """
     Get previous day's high and low prices.

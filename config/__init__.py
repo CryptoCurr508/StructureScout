@@ -103,8 +103,24 @@ class Config:
     
     @property
     def trading_symbol(self) -> str:
-        """Trading symbol (e.g., NAS100)."""
+        """Trading symbol (e.g., NAS100 or #NAS100_Mar)."""
         return self.config['trading']['symbol']
+    
+    # Allow dynamic update of trading symbol
+    @trading_symbol.setter
+    def trading_symbol(self, value: str):
+        """Set trading symbol dynamically."""
+        self.config['trading']['symbol'] = value
+    
+    @property
+    def symbol_base(self) -> str:
+        """Base symbol name for matching (e.g., NAS100)."""
+        return self.config['trading'].get('symbol_base', 'NAS100')
+    
+    @property
+    def auto_detect_symbol(self) -> bool:
+        """Whether to auto-detect broker symbol format."""
+        return self.config['trading'].get('auto_detect_symbol', True)
     
     @property
     def trading_timeframe(self) -> str:

@@ -34,7 +34,9 @@ trading_hours:
 # Symbol and Chart Configuration
 # =============================================================================
 trading:
-  symbol: "NAS100"  # Or broker-specific symbol
+  symbol: "#NAS100_Mar"  # Broker-specific symbol (auto-detects month suffix)
+  symbol_base: "NAS100"  # Base symbol name for matching
+  auto_detect_symbol: true  # Automatically detect broker symbol format
   timeframe: "M5"  # 5-minute charts
   screenshot_width: 1920
   screenshot_height: 1080

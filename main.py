@@ -27,7 +27,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from config import get_config
 
 # Import modules
-from modules.mt5_connection import MT5Connection, get_previous_day_levels
+from modules.mt5_connection import MT5Connection, get_previous_day_levels, detect_broker_symbol
 from modules.gpt_analysis import analyze_chart_with_gpt4, validate_setup_rules, calculate_position_size
 from modules.telegram_bot import TelegramNotifier, format_setup_alert, format_daily_summary
 from modules.data_logger import log_analysis_to_csv, get_weekly_summary_stats
@@ -106,6 +106,16 @@ class StructureScoutBot:
                     path=self.config.mt5_path
                 )
                 self.mt5_connection.connect()
+                
+                # Auto-detect broker symbol format if enabled
+                if self.config.auto_detect_symbol:
+                    logger.info(f"Auto-detecting broker symbol format for {self.config.symbol_base}...")
+                    detected_symbol = detect_broker_symbol(self.config.symbol_base)
+                    if detected_symbol:
+                        self.config.trading_symbol = detected_symbol
+                        logger.info(f"Using broker symbol: {detected_symbol}")
+                    else:
+                        logger.warning(f"Could not auto-detect symbol, using configured: {self.config.trading_symbol}")
             
             # Initialize Telegram
             logger.info("Initializing Telegram bot...")
