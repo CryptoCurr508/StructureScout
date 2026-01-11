@@ -17,7 +17,7 @@ import logging
 import signal
 from pathlib import Path
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Dict, Any
 import time
 
 # Add project root to path
