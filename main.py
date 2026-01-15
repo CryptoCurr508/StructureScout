@@ -12,14 +12,17 @@ Usage:
 No emojis or unicode characters in this file.
 """
 
-import sys
+import asyncio
 import logging
 import signal
-from pathlib import Path
-from datetime import datetime
-from typing import Optional, Dict, Any
+import sys
 import time
-import asyncio
+from datetime import datetime, timedelta
+from pathlib import Path
+from typing import Dict, Any, Optional
+
+import pytz
+from dotenv import load_dotenv
 
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent))
@@ -228,14 +231,31 @@ class StructureScoutBot:
             
             # Send startup notification
             if self.telegram:
+                # Build detailed startup status
+                mt5_status = "🔌 ACTIVE" if not self.dry_run and hasattr(self, 'mt5_connection') and self.mt5_connection.is_connected else "🔌 DRY-RUN"
+                screenshot_status = "📸 ENABLED" if not self.dry_run else "📸 DRY-RUN"
+                
                 startup_msg = f"""
-*StructureScout Bot Started*
+*🚀 StructureScout Bot Started*
 
-*Mode:* {self.config.current_mode}
-*Status:* System initialized
-*Dry Run:* {'Yes' if self.dry_run else 'No'}
+*📊 System Status:*
+• Mode: `{self.config.current_mode}`
+• Dry Run: `{'Yes' if self.dry_run else 'No'}`
+• Symbol: `{self.config.trading_symbol}`
+• Timeframe: `M5`
+• Trading Window: `{self.config.trading_start_time} - {self.config.trading_end_time} EST`
 
-Bot is ready to begin trading hours monitoring.
+*🔌 Connection Status:*
+• MT5: {mt5_status}
+• Screenshot: {screenshot_status}
+• Telegram: ✅ Connected
+• Scheduler: ✅ Active
+
+*⚡ Live Trading:* `{'ENABLED' if self.config.is_live_trading_allowed else 'DISABLED'}`
+
+*📅 Next Action:* Waiting for trading window (09:30 EST)
+
+Bot is ready and monitoring for trading opportunities!
 """
                 asyncio.run(self.telegram.send_message(startup_msg))
             
@@ -330,8 +350,15 @@ Bot is ready to begin trading hours monitoring.
             self.scheduler.schedule_scan(scan_time, self.main_analysis_workflow)
             logger.info(f"Scheduled scan at {scan_time} EST")
         
-        # Schedule daily summary at 12:00 PM
+        # Schedule periodic status updates
+        # Every 30 minutes during trading hours, every 2 hours otherwise
+        self.scheduler.schedule_periodic_task("30_min", self.send_periodic_status_update)
+        self.scheduler.schedule_periodic_task("2_hour", self.send_periodic_status_update)
+        logger.info("Scheduled periodic status updates")
+        
+        # Schedule daily summary
         self.scheduler.schedule_daily_task("12:00", self.generate_daily_summary)
+        logger.info("Scheduled daily summary at 12:00 EST")
         
         # Start scheduler
         self.scheduler.start()
@@ -376,6 +403,123 @@ Bot is ready to begin trading hours monitoring.
         logger.info("StructureScout Bot stopped")
     
     # Command handler methods for Telegram
+    
+    def send_periodic_status_update(self):
+        """Send periodic status update to Telegram."""
+        if not self.telegram:
+            return
+        
+        try:
+            status = self.get_status()
+            current_time = datetime.now(pytz.timezone(self.config.timezone))
+            
+            # Only send during trading hours or every 2 hours
+            is_trading_time = self.scheduler.is_trading_window(current_time) if self.scheduler else False
+            
+            status_msg = f"""
+*📊 StructureScout Status Update*
+
+*⏰ Time:* `{current_time.strftime('%I:%M %p EST')}`
+*📈 Mode:* `{status['mode']}`
+*🔌 MT5:* {status['mt5_connected']}
+*🤖 Trading:* {status['trading_active']}
+
+*📊 Today's Activity:*
+• Scans: `{status['scans_today']}`
+• Setups: `{status['setups_today']}`
+• Trades: `{status['trades_today']}`
+
+*📅 Next Scan:* `{status['next_scan']}`
+
+{'🎯 Active Trading Window' if is_trading_time else '⏸️ Outside Trading Hours'}
+"""
+            
+            asyncio.run(self.telegram.send_message(status_msg))
+            logger.info("Periodic status update sent")
+            
+        except Exception as e:
+            logger.error(f"Failed to send periodic status update: {e}")
+    
+    def send_trade_notification(self, trade_data: Dict[str, Any]) -> None:
+        """Send detailed trade notification."""
+        if not self.telegram:
+            return
+        
+        try:
+            setup_type = trade_data.get('setup_type', 'Unknown')
+            direction = trade_data.get('direction', 'Unknown')
+            entry = trade_data.get('entry_price', 0)
+            stop_loss = trade_data.get('stop_loss_price', 0)
+            take_profit = trade_data.get('take_profit_1', 0)
+            confidence = trade_data.get('confidence_score', 0)
+            
+            direction_emoji = "🟢" if direction == 'long' else "🔴"
+            
+            trade_msg = f"""
+*🚨 TRADE SIGNAL DETECTED!*
+
+{direction_emoji} *{setup_type.replace('_', ' ').title()} - {direction.upper()}*
+
+*📊 Entry Details:*
+• Entry: `{entry}`
+• Stop Loss: `{stop_loss}`
+• Take Profit: `{take_profit}`
+• Risk/Reward: `{trade_data.get('reward_risk_ratio', 0):.2f}`
+• Confidence: `{confidence}%`
+
+*📈 Setup Quality:* `{trade_data.get('setup_quality', 'Unknown').title()}`
+
+*⚡ Action:* {'🟢 READY TO TRADE' if self.config.is_live_trading_allowed else '🟡 OBSERVATION MODE'}
+
+*📝 Analysis Notes:*
+{trade_data.get('analysis_notes', 'No additional notes')}
+"""
+            
+            asyncio.run(self.telegram.send_message(trade_msg))
+            logger.info(f"Trade notification sent: {setup_type} {direction}")
+            
+        except Exception as e:
+            logger.error(f"Failed to send trade notification: {e}")
+    
+    def generate_daily_summary(self):
+        """Generate and send daily trading summary."""
+        if not self.telegram:
+            return
+        
+        try:
+            current_time = datetime.now(pytz.timezone(self.config.timezone))
+            status = self.get_status()
+            
+            summary_msg = f"""
+*📊 Daily Trading Summary*
+
+*📅 Date:* `{current_time.strftime('%B %d, %Y')}`
+
+*📈 Performance:*
+• Total Scans: `{status['scans_today']}`
+• Setups Found: `{status['setups_today']}`
+• Trades Executed: `{status['trades_today']}`
+
+*🔌 System Status:*
+• MT5: {status['mt5_connected']}
+• Mode: `{status['mode']}`
+• Trading: {status['trading_active']}
+
+*💰 Account:*
+• Balance: `TBD` (Will show when connected)
+• Daily P&L: `TBD`
+
+*📝 Notes:*
+Bot operating normally. Ready for next trading session.
+
+*🎯 Tomorrow:* Trading window opens at 9:30 AM EST
+"""
+            
+            asyncio.run(self.telegram.send_message(summary_msg))
+            logger.info("Daily summary sent")
+            
+        except Exception as e:
+            logger.error(f"Failed to generate daily summary: {e}")
     
     def get_status(self) -> Dict[str, Any]:
         """Get current bot status for /status command."""

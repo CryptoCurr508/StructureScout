@@ -203,35 +203,49 @@ class TradingScheduler:
             self.running = False
             logger.info("Trading scheduler stopped")
     
-    def schedule_scan(self, scan_time: str, callback_func, args=None) -> str:
+    def schedule_scan(self, time_str: str, callback_func) -> None:
         """
-        Schedule a market scan at specific time.
+        Schedule a scan at specific time.
         
         Args:
-            scan_time: Time to run scan (HH:MM format)
-            callback_func: Function to call
-            args: Arguments to pass to function
-            
-        Returns:
-            Job ID
+            time_str: Time in HH:MM format
+            callback_func: Function to execute
         """
-        hour, minute = map(int, scan_time.split(':'))
-        
-        # Schedule on weekdays only
-        job = self.scheduler.add_job(
+        hour, minute = map(int, time_str.split(':'))
+        self.scheduler.add_job(
             callback_func,
-            trigger=CronTrigger(
-                day_of_week='mon-fri',
-                hour=hour,
-                minute=minute,
-                timezone=self.tz
-            ),
-            args=args or [],
-            id=f"scan_{scan_time.replace(':', '')}"
+            trigger=CronTrigger(hour=hour, minute=minute, day_of_week='mon-fri', timezone=self.tz),
+            id=f"scan_{time_str}",
+            max_instances=1
         )
+        logger.info(f"Scheduled scan at {time_str} EST")
+    
+    def schedule_periodic_task(self, interval: str, callback_func) -> None:
+        """
+        Schedule a periodic task.
         
-        logger.info(f"Scheduled scan at {scan_time} EST")
-        return job.id
+        Args:
+            interval: Interval (e.g., "30_min", "2_hour")
+            callback_func: Function to execute
+        """
+        if interval == "30_min":
+            # Every 30 minutes during trading hours (9:30-11:30)
+            self.scheduler.add_job(
+                callback_func,
+                trigger=CronTrigger(minute='*/30', hour='9-11', day_of_week='mon-fri', timezone=self.tz),
+                id="periodic_30_min",
+                max_instances=1
+            )
+            logger.info("Scheduled 30-minute periodic updates during trading hours")
+        elif interval == "2_hour":
+            # Every 2 hours round the clock
+            self.scheduler.add_job(
+                callback_func,
+                trigger=CronTrigger(minute=0, hour='*/2', timezone=self.tz),
+                id="periodic_2_hour",
+                max_instances=1
+            )
+            logger.info("Scheduled 2-hour periodic updates")
     
     def schedule_daily_task(self, run_time: str, callback_func, args=None) -> str:
         """
