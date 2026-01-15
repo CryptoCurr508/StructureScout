@@ -124,7 +124,7 @@ class StructureScoutBot:
             
             if not self.dry_run:
                 logger.info("Connecting to MT5...")
-                print("🔌 Attempting to connect to MT5...")
+                print("Attempting to connect to MT5...")
                 self.mt5_connection = MT5Connection(
                     login=self.config.mt5_login,
                     password=self.config.mt5_password,
@@ -133,12 +133,12 @@ class StructureScoutBot:
                 )
                 try:
                     self.mt5_connection.connect()
-                    print("✅ MT5 Connection: ACTIVE")
+                    print("MT5 Connection: ACTIVE")
                     print(f"   Server: {self.config.mt5_server}")
                     print(f"   Login: {self.config.mt5_login}")
                     
                     # Test screenshot capture
-                    print("\n📸 Testing screenshot capture...")
+                    print("\nTesting screenshot capture...")
                     from modules.mt5_connection import get_chart_screenshot
                     test_screenshot = get_chart_screenshot(
                         symbol=self.config.trading_symbol,
@@ -147,19 +147,19 @@ class StructureScoutBot:
                         height=600
                     )
                     if test_screenshot:
-                        print("✅ Screenshot Capture: ENABLED")
+                        print("Screenshot Capture: ENABLED")
                         print(f"   Test screenshot saved: {test_screenshot}")
                     else:
-                        print("❌ Screenshot Capture: FAILED")
+                        print("Screenshot Capture: FAILED")
                         print("   Check MT5 window visibility and pyautogui permissions")
                     
                 except Exception as e:
-                    print(f"❌ MT5 Connection: FAILED - {e}")
+                    print(f"MT5 Connection: FAILED - {e}")
                     logger.error(f"MT5 connection failed: {e}")
                     return False
             else:
-                print("🔌 MT5 Connection: DRY-RUN MODE (no actual connection)")
-                print("📸 Screenshot Capture: DRY-RUN MODE (no actual capture)")
+                print("MT5 Connection: DRY-RUN MODE (no actual connection)")
+                print("Screenshot Capture: DRY-RUN MODE (no actual capture)")
             
             print("="*60 + "\n")
             
@@ -217,16 +217,16 @@ class StructureScoutBot:
             print("\n" + "="*60)
             print("INITIALIZATION COMPLETE")
             print("="*60)
-            print("✅ Configuration loaded")
-            print("✅ Telegram bot connected")
-            print("✅ Scheduler started")
-            print("✅ News calendar updated")
-            print("✅ Risk manager ready")
-            print("✅ State manager initialized")
-            print("✅ Health monitor active")
+            print("Configuration loaded")
+            print("Telegram bot connected")
+            print("Scheduler started")
+            print("News calendar updated")
+            print("Risk manager ready")
+            print("State manager initialized")
+            print("Health monitor active")
             print("="*60)
-            print(f"🤖 Bot is ready for {'testing' if self.dry_run else 'trading'}!")
-            print(f"📅 Next scan: Waiting for trading window (09:30 EST)")
+            print(f"Bot is ready for {'testing' if self.dry_run else 'trading'}!")
+            print(f"Next scan: Waiting for trading window (09:30 EST)")
             print("="*60 + "\n")
             
             # Send startup notification
