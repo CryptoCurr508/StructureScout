@@ -62,22 +62,49 @@ class MT5Connection:
             MT5ConnectionError: If connection fails after max attempts
         """
         logger.info("Attempting to connect to MT5...")
+        logger.info(f"MT5 Path: {self.path}")
+        logger.info(f"Server: {self.server}")
+        logger.info(f"Login: {self.login}")
         
         for attempt in range(1, self.max_attempts + 1):
             self.connection_attempts = attempt
             
-            # Initialize MT5
-            if not mt5.initialize(path=self.path):
-                error = mt5.last_error()
-                logger.warning(f"MT5 initialize failed (attempt {attempt}/{self.max_attempts}): {error}")
-                time.sleep(30)  # Wait 30 seconds before retry
-                continue
+            # Initialize MT5 - try with path first, then without if fails
+            initialized = False
+            if self.path and self.path.strip():
+                path_variations = [
+                    self.path.strip(),  # Try exact path first
+                    self.path.strip().replace("\\", "/"),  # Forward slashes
+                    r"C:\Program Files\N1 Capita lMarkets MetaTrader 5\terminal64.exe",  # Exact VPS path
+                ]
+                for path in path_variations:
+                    if not mt5.initialize(path=path):
+                        error = mt5.last_error()
+                        logger.warning(f"MT5 initialize with path failed (attempt {attempt}/{self.max_attempts}): {error}")
+                    else:
+                        initialized = True
+                        break
+                if not initialized:
+                    if not mt5.initialize():
+                        error = mt5.last_error()
+                        logger.warning(f"MT5 initialize without path failed (attempt {attempt}/{self.max_attempts}): {error}")
+                        time.sleep(30)
+                        continue
+                    initialized = True
+            else:
+                if not mt5.initialize():
+                    error = mt5.last_error()
+                    logger.warning(f"MT5 initialize failed (attempt {attempt}/{self.max_attempts}): {error}")
+                    time.sleep(30)
+                    continue
+                initialized = True
             
             # Login to account
             if not mt5.login(login=int(self.login), password=self.password, server=self.server):
                 error = mt5.last_error()
-                logger.warning(f"MT5 login failed (attempt {attempt}/{self.max_attempts}): {error}")
-                mt5.shutdown()
+                logger.error(f"MT5 login failed (attempt {attempt}/{self.max_attempts}): {error}")
+                if initialized:
+                    mt5.shutdown()
                 time.sleep(30)
                 continue
             
@@ -89,6 +116,8 @@ class MT5Connection:
             account_info = mt5.account_info()
             if account_info:
                 logger.info(f"Connected to account: {account_info.login}, Balance: {account_info.balance}")
+                logger.info(f"Server: {account_info.server}")
+                logger.info(f"Company: {account_info.company}")
             
             return True
         

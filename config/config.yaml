@@ -10,6 +10,11 @@ system:
   mode_start_date: null  # Set when mode begins (YYYY-MM-DD)
   auto_advance_milestones: false  # Require manual approval
   environment: "development"  # development | production
+  
+  # Live Trading Control
+  enable_live_trading: false  # MASTER SWITCH: Set to true to enable live trading
+  require_manual_confirmation: true  # Require manual confirmation for each trade
+  trading_enabled: false  # Additional safety layer - must be true for live trading
 
 # =============================================================================
 # Trading Hours and Scheduling
@@ -40,6 +45,28 @@ trading:
   timeframe: "M5"  # 5-minute charts
   screenshot_width: 1920
   screenshot_height: 1080
+
+# =============================================================================
+# Position Management Settings
+# =============================================================================
+position_management:
+  # Partial exits
+  partial_exit_ratio: 0.5  # 50% partial exit at TP1
+  move_stop_to_breakeven_after_partial: true
+  
+  # Trailing stops
+  enable_trailing_stops: true
+  trailing_stop_bars: 2  # Number of bars for confirmation
+  trail_only_after_partial_exit: true
+  
+  # Time limits
+  max_hold_hours: 3  # Maximum hold time for any position
+  close_before_lunch: true  # Close positions before 11:30 AM
+  no_overnight_positions: true
+  
+  # Mean reversion special rules
+  mean_reversion_full_exit_at_target: true  # Close 100% at VWAP for mean reversion
+  no_trailing_for_mean_reversion: true
 
 # =============================================================================
 # Risk Management Settings

@@ -3,13 +3,14 @@ Scheduler Module
 
 Handles task scheduling during trading hours.
 Manages market hours detection, trading calendar, and scan scheduling.
+Also monitors positions for hold time enforcement.
 
 No emojis or unicode characters in this file.
 """
 
 import logging
 from datetime import datetime, time, timedelta
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 import pytz
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -387,3 +388,74 @@ if __name__ == "__main__":
         
     else:
         print("Usage: python3 -m modules.scheduler --test")
+
+
+def monitor_position_hold_times(position_manager, max_hold_hours: int = 3) -> List[Dict[str, Any]]:
+    """
+    Monitor all open positions for hold time violations.
+    
+    Args:
+        position_manager: Position manager instance
+        max_hold_hours: Maximum allowed hold time in hours
+        
+    Returns:
+        List of positions that need attention
+    """
+    current_time = datetime.now(pytz.timezone("America/New_York"))
+    violations = []
+    
+    # Check each position for hold time violations
+    for ticket, position in position_manager.open_positions.items():
+        entry_time = position.get('entry_time')
+        if not entry_time:
+            continue
+            
+        hold_duration = current_time - entry_time
+        
+        # Check if approaching limit (warning at 2.5 hours)
+        if hold_duration >= timedelta(hours=max_hold_hours - 0.5):
+            violations.append({
+                'ticket': ticket,
+                'hold_duration_hours': hold_duration.total_seconds() / 3600,
+                'entry_time': entry_time,
+                'setup_type': position.get('setup_type'),
+                'direction': position.get('direction'),
+                'urgency': 'critical' if hold_duration >= timedelta(hours=max_hold_hours) else 'warning',
+                'message': f"Position {ticket} held for {hold_duration.total_seconds()/3600:.1f} hours"
+            })
+    
+    return violations
+
+
+def should_close_all_positions(current_time: datetime, timezone_str: str = "America/New_York") -> tuple[bool, str]:
+    """
+    Check if all positions should be closed based on time rules.
+    
+    Args:
+        current_time: Current datetime
+        timezone_str: Timezone string
+        
+    Returns:
+        Tuple of (should_close, reason)
+    """
+    tz = pytz.timezone(timezone_str)
+    if current_time.tzinfo is None:
+        current_time = tz.localize(current_time)
+    else:
+        current_time = current_time.astimezone(tz)
+    
+    current_hour = current_time.hour
+    current_minute = current_time.minute
+    current_time_minutes = current_hour * 60 + current_minute
+    
+    # Close all positions at 11:25 AM (before lunch break)
+    lunch_close_time = 11 * 60 + 25  # 11:25 AM
+    if current_time_minutes >= lunch_close_time and current_time_minutes < 13 * 60:  # Before 1:00 PM
+        return True, "Pre-lunch position close (11:25 AM)"
+    
+    # Close all positions at 3:55 PM (before market close)
+    end_close_time = 15 * 60 + 55  # 3:55 PM
+    if current_time_minutes >= end_close_time:
+        return True, "End-of-day position close (3:55 PM)"
+    
+    return False, ""

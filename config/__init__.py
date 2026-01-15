@@ -82,6 +82,28 @@ class Config:
         return self.config['system']['current_mode']
     
     @property
+    def enable_live_trading(self) -> bool:
+        """Master switch for live trading."""
+        return self.config['system'].get('enable_live_trading', False)
+    
+    @property
+    def require_manual_confirmation(self) -> bool:
+        """Require manual confirmation for trades."""
+        return self.config['system'].get('require_manual_confirmation', True)
+    
+    @property
+    def trading_enabled(self) -> bool:
+        """Additional safety layer for trading."""
+        return self.config['system'].get('trading_enabled', False)
+    
+    @property
+    def is_live_trading_allowed(self) -> bool:
+        """Check if live trading is fully enabled."""
+        return (self.enable_live_trading and 
+                self.trading_enabled and 
+                self.current_mode in ['micro_live', 'full_live'])
+    
+    @property
     def timezone(self) -> str:
         """Trading timezone."""
         return self.config['trading_hours']['timezone']
