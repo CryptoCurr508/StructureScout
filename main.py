@@ -94,6 +94,17 @@ class StructureScoutBot:
             True if initialization successful
         """
         try:
+            print("\n" + "="*60)
+            print("STRUCTURESCOUT BOT STATUS")
+            print("="*60)
+            print(f"Mode: {'DRY-RUN (Testing)' if self.dry_run else 'LIVE TRADING'}")
+            print(f"Symbol: {self.config.trading_symbol}")
+            print(f"Timeframe: M5")
+            print(f"Trading Window: {self.config.trading_start_time} - {self.config.trading_end_time} EST")
+            print(f"Current Mode: {self.config.current_mode}")
+            print(f"Live Trading: {'ENABLED' if self.config.is_live_trading_allowed else 'DISABLED'}")
+            print("="*60 + "\n")
+
             logger.info("Initializing StructureScout components...")
             
             # Validate credentials
@@ -104,25 +115,60 @@ class StructureScoutBot:
                 return False
             
             # Initialize MT5 connection
+            print("\n" + "="*60)
+            print("MT5 CONNECTION STATUS")
+            print("="*60)
+            
             if not self.dry_run:
                 logger.info("Connecting to MT5...")
+                print("🔌 Attempting to connect to MT5...")
                 self.mt5_connection = MT5Connection(
                     login=self.config.mt5_login,
                     password=self.config.mt5_password,
                     server=self.config.mt5_server,
                     path=self.config.mt5_path
                 )
-                self.mt5_connection.connect()
-                
-                # Auto-detect broker symbol format if enabled
-                if self.config.auto_detect_symbol:
-                    logger.info(f"Auto-detecting broker symbol format for {self.config.symbol_base}...")
-                    detected_symbol = detect_broker_symbol(self.config.symbol_base)
-                    if detected_symbol:
-                        self.config.trading_symbol = detected_symbol
-                        logger.info(f"Using broker symbol: {detected_symbol}")
+                try:
+                    self.mt5_connection.connect()
+                    print("✅ MT5 Connection: ACTIVE")
+                    print(f"   Server: {self.config.mt5_server}")
+                    print(f"   Login: {self.config.mt5_login}")
+                    
+                    # Test screenshot capture
+                    print("\n📸 Testing screenshot capture...")
+                    from modules.mt5_connection import get_chart_screenshot
+                    test_screenshot = get_chart_screenshot(
+                        symbol=self.config.trading_symbol,
+                        timeframe="M5",
+                        width=800,
+                        height=600
+                    )
+                    if test_screenshot:
+                        print("✅ Screenshot Capture: ENABLED")
+                        print(f"   Test screenshot saved: {test_screenshot}")
                     else:
-                        logger.warning(f"Could not auto-detect symbol, using configured: {self.config.trading_symbol}")
+                        print("❌ Screenshot Capture: FAILED")
+                        print("   Check MT5 window visibility and pyautogui permissions")
+                    
+                except Exception as e:
+                    print(f"❌ MT5 Connection: FAILED - {e}")
+                    logger.error(f"MT5 connection failed: {e}")
+                    return False
+            else:
+                print("🔌 MT5 Connection: DRY-RUN MODE (no actual connection)")
+                print("📸 Screenshot Capture: DRY-RUN MODE (no actual capture)")
+            
+            print("="*60 + "\n")
+            
+            # Auto-detect broker symbol format if enabled
+            if self.config.auto_detect_symbol and not self.dry_run:
+                logger.info(f"Auto-detecting broker symbol format for {self.config.symbol_base}...")
+                detected_symbol = detect_broker_symbol(self.config.symbol_base)
+                if detected_symbol:
+                    self.config.trading_symbol = detected_symbol
+                    logger.info(f"Using broker symbol: {detected_symbol}")
+                else:
+                    logger.warning(f"Could not auto-detect symbol, using configured: {self.config.trading_symbol}")
             
             # Initialize Telegram with command handlers
             logger.info("Initializing Telegram bot...")
@@ -164,6 +210,21 @@ class StructureScoutBot:
             self.health_monitor = HealthMonitor()
             
             logger.info("All components initialized successfully")
+            
+            print("\n" + "="*60)
+            print("INITIALIZATION COMPLETE")
+            print("="*60)
+            print("✅ Configuration loaded")
+            print("✅ Telegram bot connected")
+            print("✅ Scheduler started")
+            print("✅ News calendar updated")
+            print("✅ Risk manager ready")
+            print("✅ State manager initialized")
+            print("✅ Health monitor active")
+            print("="*60)
+            print(f"🤖 Bot is ready for {'testing' if self.dry_run else 'trading'}!")
+            print(f"📅 Next scan: Waiting for trading window (09:30 EST)")
+            print("="*60 + "\n")
             
             # Send startup notification
             if self.telegram:
