@@ -232,30 +232,36 @@ class StructureScoutBot:
             # Send startup notification
             if self.telegram:
                 # Build detailed startup status
-                mt5_status = "🔌 ACTIVE" if not self.dry_run and hasattr(self, 'mt5_connection') and self.mt5_connection.is_connected else "🔌 DRY-RUN"
-                screenshot_status = "📸 ENABLED" if not self.dry_run else "📸 DRY-RUN"
+                mt5_status = "✅ Connected" if not self.dry_run and hasattr(self, 'mt5_connection') and self.mt5_connection.is_connected else "❌ Disconnected"
+                screenshot_status = "✅ Ready" if not self.dry_run else "❌ Dry-run"
                 
                 startup_msg = f"""
-*🚀 StructureScout Bot Started*
+*StructureScout Bot System Status*
 
-*📊 System Status:*
-• Mode: `{self.config.current_mode}`
-• Dry Run: `{'Yes' if self.dry_run else 'No'}`
-• Symbol: `{self.config.trading_symbol}`
-• Timeframe: `M5`
-• Trading Window: `{self.config.trading_start_time} - {self.config.trading_end_time} EST`
+*Account & Connection:*
+• Account: {self.config.mt5_login}
+• Server: {self.config.mt5_server}
+• MT5 Status: {mt5_status}
+• Screenshot Capture: {screenshot_status}
 
-*🔌 Connection Status:*
-• MT5: {mt5_status}
-• Screenshot: {screenshot_status}
-• Telegram: ✅ Connected
+*Trading Configuration:*
+• Mode: {self.config.current_mode.replace('_', ' ').title()}
+• Symbol: {self.config.trading_symbol}
+• Timeframe: M5
+• Trading Window: {self.config.trading_start_time} - {self.config.trading_end_time} EST
+
+*System Status:*
 • Scheduler: ✅ Active
+• Telegram Bot: ✅ Connected
+• Risk Manager: ✅ Ready
+• Live Trading: {'✅ Enabled' if self.config.is_live_trading_allowed else '❌ Disabled'}
 
-*⚡ Live Trading:* `{'ENABLED' if self.config.is_live_trading_allowed else 'DISABLED'}`
+*Schedule:*
+• Next Scan: Waiting for 09:30 EST
+• Status Updates: Every 30 minutes (trading hours)
+• Daily Summary: 12:00 EST
 
-*📅 Next Action:* Waiting for trading window (09:30 EST)
-
-Bot is ready and monitoring for trading opportunities!
+Bot is ready and monitoring for trading opportunities.
 """
                 asyncio.run(self.telegram.send_message(startup_msg))
             
@@ -417,21 +423,24 @@ Bot is ready and monitoring for trading opportunities!
             is_trading_time = self.scheduler.is_trading_window(current_time) if self.scheduler else False
             
             status_msg = f"""
-*📊 StructureScout Status Update*
+*StructureScout Status Update*
 
-*⏰ Time:* `{current_time.strftime('%I:%M %p EST')}`
-*📈 Mode:* `{status['mode']}`
-*🔌 MT5:* {status['mt5_connected']}
-*🤖 Trading:* {status['trading_active']}
+*Time & Status:*
+• Time: {current_time.strftime('%I:%M %p EST')}
+• Mode: {status['mode']}
+• MT5 Status: {status['mt5_connected']}
+• Trading Status: {status['trading_active']}
 
-*📊 Today's Activity:*
-• Scans: `{status['scans_today']}`
-• Setups: `{status['setups_today']}`
-• Trades: `{status['trades_today']}`
+*Today's Activity:*
+• Scans Completed: {status['scans_today']}
+• Setups Found: {status['setups_today']}
+• Trades Executed: {status['trades_today']}
 
-*📅 Next Scan:* `{status['next_scan']}`
+*Schedule:*
+• Next Scan: {status['next_scan']}
 
-{'🎯 Active Trading Window' if is_trading_time else '⏸️ Outside Trading Hours'}
+*Market Status:*
+{'🟢 Active Trading Window' if is_trading_time else '🔴 Outside Trading Hours'}
 """
             
             asyncio.run(self.telegram.send_message(status_msg))
@@ -456,22 +465,25 @@ Bot is ready and monitoring for trading opportunities!
             direction_emoji = "🟢" if direction == 'long' else "🔴"
             
             trade_msg = f"""
-*🚨 TRADE SIGNAL DETECTED!*
+*Trade Signal Detected*
 
-{direction_emoji} *{setup_type.replace('_', ' ').title()} - {direction.upper()}*
+*Setup Information:*
+• Type: {setup_type.replace('_', ' ').title()}
+• Direction: {direction.upper()}
+• Quality: {trade_data.get('setup_quality', 'Unknown').title()}
+• Confidence: {confidence}%
 
-*📊 Entry Details:*
-• Entry: `{entry}`
-• Stop Loss: `{stop_loss}`
-• Take Profit: `{take_profit}`
-• Risk/Reward: `{trade_data.get('reward_risk_ratio', 0):.2f}`
-• Confidence: `{confidence}%`
+*Entry Details:*
+• Entry Price: {entry}
+• Stop Loss: {stop_loss}
+• Take Profit: {take_profit}
+• Risk/Reward: {trade_data.get('reward_risk_ratio', 0):.2f}
 
-*📈 Setup Quality:* `{trade_data.get('setup_quality', 'Unknown').title()}`
+*Trading Status:*
+• Mode: {self.config.current_mode.replace('_', ' ').title()}
+• Action: {'Ready to Execute' if self.config.is_live_trading_allowed else 'Observation Mode'}
 
-*⚡ Action:* {'🟢 READY TO TRADE' if self.config.is_live_trading_allowed else '🟡 OBSERVATION MODE'}
-
-*📝 Analysis Notes:*
+*Analysis Notes:*
 {trade_data.get('analysis_notes', 'No additional notes')}
 """
             
@@ -491,28 +503,29 @@ Bot is ready and monitoring for trading opportunities!
             status = self.get_status()
             
             summary_msg = f"""
-*📊 Daily Trading Summary*
+*Daily Trading Summary*
 
-*📅 Date:* `{current_time.strftime('%B %d, %Y')}`
+*Date:* {current_time.strftime('%B %d, %Y')}
 
-*📈 Performance:*
-• Total Scans: `{status['scans_today']}`
-• Setups Found: `{status['setups_today']}`
-• Trades Executed: `{status['trades_today']}`
+*Performance Summary:*
+• Total Scans: {status['scans_today']}
+• Setups Found: {status['setups_today']}
+• Trades Executed: {status['trades_today']}
 
-*🔌 System Status:*
-• MT5: {status['mt5_connected']}
-• Mode: `{status['mode']}`
-• Trading: {status['trading_active']}
+*System Status:*
+• MT5 Connection: {status['mt5_connected']}
+• Current Mode: {status['mode']}
+• Trading Status: {status['trading_active']}
 
-*💰 Account:*
-• Balance: `TBD` (Will show when connected)
-• Daily P&L: `TBD`
+*Account Information:*
+• Balance: TBD (Will update when connected)
+• Daily P&L: TBD
 
-*📝 Notes:*
-Bot operating normally. Ready for next trading session.
+*Notes:*
+Bot operating normally. All systems ready.
 
-*🎯 Tomorrow:* Trading window opens at 9:30 AM EST
+*Next Session:*
+Trading window opens at 9:30 AM EST tomorrow
 """
             
             asyncio.run(self.telegram.send_message(summary_msg))
