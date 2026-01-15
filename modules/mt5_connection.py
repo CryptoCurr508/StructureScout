@@ -217,7 +217,7 @@ def get_chart_screenshot(
     output_path: Optional[Path] = None
 ) -> Optional[Path]:
     """
-    Capture screenshot of specified chart.
+    Capture screenshot of specified chart using pyautogui.
     
     Args:
         symbol: Trading symbol (e.g., "NAS100")
@@ -229,54 +229,33 @@ def get_chart_screenshot(
     Returns:
         Path to saved screenshot or None if failed
     """
-    # Map timeframe string to MT5 constant
-    timeframe_map = {
-        'M1': mt5.TIMEFRAME_M1,
-        'M5': mt5.TIMEFRAME_M5,
-        'M15': mt5.TIMEFRAME_M15,
-        'M30': mt5.TIMEFRAME_M30,
-        'H1': mt5.TIMEFRAME_H1,
-        'H4': mt5.TIMEFRAME_H4,
-        'D1': mt5.TIMEFRAME_D1
-    }
-    
-    mt5_timeframe = timeframe_map.get(timeframe)
-    if mt5_timeframe is None:
-        logger.error(f"Invalid timeframe: {timeframe}")
-        return None
-    
-    # Copy chart to clipboard (MT5 method)
-    # Note: This requires MT5 to be running with GUI
-    # For headless operation, alternative methods may be needed
-    
-    if not mt5.symbol_select(symbol, True):
-        logger.error(f"Failed to select symbol: {symbol}")
-        return None
-    
-    # Get chart window
-    # Note: MT5 Python API has limited chart screenshot capabilities
-    # This is a placeholder for the actual implementation
-    # In production, you may need to use pyautogui or similar for screenshots
-    
-    logger.warning("Chart screenshot via MT5 API has limitations")
-    logger.warning("Consider using pyautogui or platform-specific screenshot tools")
-    
-    # Generate output path if not provided
-    if output_path is None:
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"{symbol}_{timestamp}.png"
-        output_path = Path("screenshots") / datetime.now().strftime("%Y-%m-%d") / filename
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-    
-    # Placeholder: In actual implementation, capture screenshot here
-    # For now, create a blank placeholder image
     try:
-        img = Image.new('RGB', (width, height), color='white')
-        img.save(output_path)
-        logger.info(f"Screenshot saved to: {output_path}")
-        return output_path
+        # Import chart capture module
+        from modules.chart_screenshot import get_chart_screenshot as capture
+        
+        logger.info(f"Capturing chart screenshot for {symbol} {timeframe}")
+        
+        # Capture screenshot using the dedicated module
+        screenshot_path = capture(
+            symbol=symbol,
+            timeframe=timeframe,
+            width=width,
+            height=height,
+            output_path=output_path
+        )
+        
+        if screenshot_path:
+            logger.info(f"Chart screenshot captured successfully: {screenshot_path}")
+        else:
+            logger.error("Failed to capture chart screenshot")
+        
+        return screenshot_path
+        
+    except ImportError as e:
+        logger.error(f"Chart screenshot module not available: {e}")
+        return None
     except Exception as e:
-        logger.error(f"Failed to save screenshot: {e}")
+        logger.error(f"Error capturing chart screenshot: {e}")
         return None
 
 

@@ -18,6 +18,8 @@ python-telegram-bot>=20.7
 
 # Image Processing
 Pillow>=10.1.0
+pyautogui>=0.9.54
+opencv-python>=4.8.0
 
 # Timezone Handling
 pytz>=2023.3
