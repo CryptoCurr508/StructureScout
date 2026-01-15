@@ -122,44 +122,50 @@ class StructureScoutBot:
             print("MT5 CONNECTION STATUS")
             print("="*60)
             
-            if not self.dry_run:
-                logger.info("Connecting to MT5...")
-                print("Attempting to connect to MT5...")
-                self.mt5_connection = MT5Connection(
-                    login=self.config.mt5_login,
-                    password=self.config.mt5_password,
-                    server=self.config.mt5_server,
-                    path=self.config.mt5_path
-                )
-                try:
-                    self.mt5_connection.connect()
+            # Connect to MT5 even in dry-run mode for testing screenshots
+            logger.info("Connecting to MT5...")
+            print("Attempting to connect to MT5...")
+            self.mt5_connection = MT5Connection(
+                login=self.config.mt5_login,
+                password=self.config.mt5_password,
+                server=self.config.mt5_server,
+                path=self.config.mt5_path
+            )
+            try:
+                self.mt5_connection.connect()
+                if self.dry_run:
+                    print("MT5 Connection: ACTIVE (Dry-run mode)")
+                else:
                     print("MT5 Connection: ACTIVE")
-                    print(f"   Server: {self.config.mt5_server}")
-                    print(f"   Login: {self.config.mt5_login}")
-                    
-                    # Test screenshot capture
-                    print("\nTesting screenshot capture...")
-                    from modules.mt5_connection import get_chart_screenshot
-                    test_screenshot = get_chart_screenshot(
-                        symbol=self.config.trading_symbol,
-                        timeframe="M5",
-                        width=800,
-                        height=600
-                    )
-                    if test_screenshot:
-                        print("Screenshot Capture: ENABLED")
-                        print(f"   Test screenshot saved: {test_screenshot}")
+                print(f"   Server: {self.config.mt5_server}")
+                print(f"   Login: {self.config.mt5_login}")
+                
+                # Test screenshot capture
+                print("\nTesting screenshot capture...")
+                from modules.mt5_connection import get_chart_screenshot
+                test_screenshot = get_chart_screenshot(
+                    symbol=self.config.trading_symbol,
+                    timeframe="M5",
+                    width=800,
+                    height=600
+                )
+                if test_screenshot:
+                    if self.dry_run:
+                        print("Screenshot Capture: ENABLED (Testing mode)")
                     else:
-                        print("Screenshot Capture: FAILED")
-                        print("   Check MT5 window visibility and pyautogui permissions")
-                    
-                except Exception as e:
-                    print(f"MT5 Connection: FAILED - {e}")
-                    logger.error(f"MT5 connection failed: {e}")
-                    return False
-            else:
-                print("MT5 Connection: DRY-RUN MODE (no actual connection)")
-                print("Screenshot Capture: DRY-RUN MODE (no actual capture)")
+                        print("Screenshot Capture: ENABLED")
+                    print(f"   Test screenshot saved: {test_screenshot}")
+                else:
+                    print("Screenshot Capture: FAILED")
+                    print("   Check MT5 window visibility and pyautogui permissions")
+                
+            except Exception as e:
+                print(f"MT5 Connection: FAILED - {e}")
+                logger.error(f"MT5 connection failed: {e}")
+                if not self.dry_run:
+                    return False  # Only fail if not in dry-run
+                else:
+                    print("Continuing in dry-run mode without MT5 connection...")
             
             print("="*60 + "\n")
             
@@ -232,8 +238,14 @@ class StructureScoutBot:
             # Send startup notification
             if self.telegram:
                 # Build detailed startup status
-                mt5_status = "✅ Connected" if not self.dry_run and hasattr(self, 'mt5_connection') and self.mt5_connection.is_connected else "❌ Disconnected"
-                screenshot_status = "✅ Ready" if not self.dry_run else "❌ Dry-run"
+                if hasattr(self, 'mt5_connection') and self.mt5_connection.is_connected():
+                    mt5_status = "✅ Connected"
+                    screenshot_status = "✅ Ready"
+                else:
+                    mt5_status = "❌ Disconnected"
+                    screenshot_status = "❌ Not Ready"
+                
+                mode_text = f"{self.config.current_mode.replace('_', ' ').title()} (Dry-run)" if self.dry_run else self.config.current_mode.replace('_', ' ').title()
                 
                 startup_msg = f"""
 *StructureScout Bot System Status*
@@ -245,7 +257,7 @@ class StructureScoutBot:
 • Screenshot Capture: {screenshot_status}
 
 *Trading Configuration:*
-• Mode: {self.config.current_mode.replace('_', ' ').title()}
+• Mode: {mode_text}
 • Symbol: {self.config.trading_symbol}
 • Timeframe: M5
 • Trading Window: {self.config.trading_start_time} - {self.config.trading_end_time} EST
@@ -256,12 +268,15 @@ class StructureScoutBot:
 • Risk Manager: ✅ Ready
 • Live Trading: {'✅ Enabled' if self.config.is_live_trading_allowed else '❌ Disabled'}
 
+*Testing Mode:*
+{'✅ Full testing with screenshots and analysis' if self.dry_run else '✅ Live trading active'}
+
 *Schedule:*
 • Next Scan: Waiting for 09:30 EST
 • Status Updates: Every 30 minutes (trading hours)
 • Daily Summary: 12:00 EST
 
-Bot is ready and monitoring for trading opportunities.
+Bot is ready and {'testing all features' if self.dry_run else 'monitoring for trading opportunities'}.
 """
                 asyncio.run(self.telegram.send_message(startup_msg))
             
@@ -314,17 +329,55 @@ Bot is ready and monitoring for trading opportunities.
                 logger.error("Failed to get previous day levels")
                 return
             
-            # TODO: Capture screenshot (placeholder for now)
-            # screenshot_path = get_chart_screenshot(...)
-            screenshot_path = None
+            # Capture screenshot (works in both dry-run and live mode)
+            logger.info("Capturing chart screenshot...")
+            screenshot_path = get_chart_screenshot(
+                symbol=self.config.trading_symbol,
+                timeframe="M5",
+                width=1920,
+                height=1080
+            )
+            
+            if not screenshot_path:
+                logger.error("Failed to capture screenshot")
+                return
+            
+            logger.info(f"Screenshot captured: {screenshot_path}")
             
             # Analyze with GPT-4o-mini
             logger.info("Analyzing chart with GPT-4o-mini...")
             timestamp_str = current_time.strftime("%Y-%m-%d %H:%M")
             
-            # TODO: Implement actual analysis when screenshot available
-            # For now, log that we would analyze
-            logger.info(f"Would analyze chart at {timestamp_str}")
+            # Perform actual analysis
+            try:
+                from modules.gpt_analysis import analyze_chart_with_gpt4
+                analysis_result = analyze_chart_with_gpt4(
+                    screenshot_path=screenshot_path,
+                    symbol=self.config.trading_symbol,
+                    timeframe="M5",
+                    timestamp=timestamp_str
+                )
+                
+                if analysis_result:
+                    logger.info(f"Analysis completed: {analysis_result.get('setup_type', 'No setup')}")
+                    
+                    # Send trade notification if setup found
+                    if analysis_result.get('setup_type') and analysis_result.get('setup_type') != 'No setup':
+                        self.send_trade_notification(analysis_result)
+                        
+                        # In live mode, execute trade (in dry-run, just log it)
+                        if not self.dry_run and self.config.is_live_trading_allowed:
+                            logger.info("Would execute trade here...")
+                            # TODO: Implement actual trade execution
+                        else:
+                            logger.info("Dry-run mode: Trade signal detected but not executed")
+                    
+                else:
+                    logger.info("No valid setup found")
+                    
+            except Exception as e:
+                logger.error(f"GPT analysis failed: {e}")
+            
             logger.info(f"Prev day high: {levels['high']}, low: {levels['low']}")
             
             # Save state
