@@ -58,9 +58,22 @@ class ChartScreenshotCapture:
                 return None
             
             mt5_window = window[0]
-            if not mt5_window.isVisible:
-                logger.error("MT5 window is not visible")
-                return None
+            # Check if window is visible (try different methods)
+            try:
+                if hasattr(mt5_window, 'isVisible'):
+                    if not mt5_window.isVisible:
+                        logger.error("MT5 window is not visible")
+                        return None
+                elif hasattr(mt5_window, 'visible'):
+                    if not mt5_window.visible:
+                        logger.error("MT5 window is not visible")
+                        return None
+                else:
+                    # If no visibility check available, assume it's visible
+                    logger.info("Window visibility check not available, proceeding...")
+            except Exception as vis_error:
+                logger.warning(f"Could not check window visibility: {vis_error}")
+                logger.info("Proceeding with screenshot attempt...")
             
             # Get window bounds
             left = mt5_window.left
