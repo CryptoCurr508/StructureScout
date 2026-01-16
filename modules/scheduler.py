@@ -225,7 +225,7 @@ class TradingScheduler:
         Schedule a periodic task.
         
         Args:
-            interval: Interval (e.g., "30_min", "2_hour")
+            interval: Interval (e.g., "30_min", "1_hour", "2_hour")
             callback_func: Function to execute
         """
         if interval == "30_min":
@@ -237,6 +237,15 @@ class TradingScheduler:
                 max_instances=1
             )
             logger.info("Scheduled 30-minute periodic updates during trading hours")
+        elif interval == "1_hour":
+            # Every hour round the clock
+            self.scheduler.add_job(
+                callback_func,
+                trigger=CronTrigger(minute=0, hour='*', timezone=self.tz),
+                id="periodic_1_hour",
+                max_instances=1
+            )
+            logger.info("Scheduled 1-hour periodic updates (24/7)")
         elif interval == "2_hour":
             # Every 2 hours round the clock
             self.scheduler.add_job(

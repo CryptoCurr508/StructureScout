@@ -273,12 +273,31 @@ class StructureScoutBot:
 
 *Schedule:*
 • Next Scan: Waiting for 09:30 EST
-• Status Updates: Every 30 minutes (trading hours)
+• Status Updates: Every hour (24/7)
 • Daily Summary: 12:00 EST
 
 Bot is ready and {'testing all features' if self.dry_run else 'monitoring for trading opportunities'}.
 """
-                asyncio.run(self.telegram.send_message(startup_msg))
+                try:
+                    asyncio.run(self.telegram.send_message(startup_msg))
+                    logger.info("Startup notification sent successfully")
+                except Exception as e:
+                    logger.error(f"Failed to send startup notification: {e}")
+                    logger.info("Bot will continue running, but Telegram notifications may be limited")
+            
+            # Send a quick test status update after 1 minute
+            import threading
+            def send_test_update():
+                import time
+                time.sleep(60)  # Wait 1 minute
+                try:
+                    self.send_periodic_status_update()
+                    logger.info("Test status update sent")
+                except Exception as e:
+                    logger.error(f"Failed to send test update: {e}")
+            
+            test_thread = threading.Thread(target=send_test_update, daemon=True)
+            test_thread.start()
             
             return True
             
@@ -413,6 +432,10 @@ Bot is ready and {'testing all features' if self.dry_run else 'monitoring for tr
         # Every 30 minutes during trading hours, every 2 hours otherwise
         self.scheduler.schedule_periodic_task("30_min", self.send_periodic_status_update)
         self.scheduler.schedule_periodic_task("2_hour", self.send_periodic_status_update)
+        
+        # Add hourly status updates for 24/7 monitoring
+        self.scheduler.schedule_periodic_task("1_hour", self.send_periodic_status_update)
+        
         logger.info("Scheduled periodic status updates")
         
         # Schedule daily summary
