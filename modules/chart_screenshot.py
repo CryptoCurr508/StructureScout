@@ -46,15 +46,35 @@ class ChartScreenshotCapture:
     
     def locate_mt5_window(self) -> Optional[Tuple[int, int, int, int]]:
         """
-        Locate MT5 window on screen.
+        Locate the MT5 window on screen.
         
         Returns:
             Tuple of (x, y, width, height) or None if not found
         """
         try:
+            # Debug: List all available windows
+            all_windows = pyautogui.getAllWindows()
+            logger.info(f"Total windows found: {len(all_windows)}")
+            
+            # Print first 10 window titles for debugging
+            for i, window in enumerate(all_windows[:10]):
+                try:
+                    title = window.title if hasattr(window, 'title') else str(window)
+                    logger.info(f"Window {i}: '{title}'")
+                except:
+                    logger.info(f"Window {i}: <unable to get title>")
+            
             window = pyautogui.getWindowsWithTitle(self.mt5_window_title)
             if not window:
                 logger.error(f"MT5 window '{self.mt5_window_title}' not found")
+                logger.info("Available window titles containing 'MT5' or 'MetaTrader':")
+                for w in all_windows:
+                    try:
+                        title = w.title if hasattr(w, 'title') else str(w)
+                        if 'mt5' in title.lower() or 'metatrader' in title.lower() or 'capital' in title.lower():
+                            logger.info(f"  Found: '{title}'")
+                    except:
+                        pass
                 return None
             
             mt5_window = window[0]
