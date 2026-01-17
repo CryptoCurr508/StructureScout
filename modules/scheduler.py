@@ -238,14 +238,14 @@ class TradingScheduler:
             )
             logger.info("Scheduled 30-minute periodic updates during trading hours")
         elif interval == "15_min":
-            # Every 15 minutes round the clock
+            # Every 15 minutes during trading hours only
             self.scheduler.add_job(
                 callback_func,
-                trigger=CronTrigger(minute='*/15', timezone=self.tz),
+                trigger=CronTrigger(minute='*/15', hour='9-11', day_of_week='mon-fri', timezone=self.tz),
                 id="periodic_15_min",
                 max_instances=1
             )
-            logger.info("Scheduled 15-minute periodic updates (24/7)")
+            logger.info("Scheduled 15-minute periodic updates during trading hours only")
         elif interval == "1_hour":
             # Every hour round the clock
             self.scheduler.add_job(
