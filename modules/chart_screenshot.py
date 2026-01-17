@@ -29,7 +29,7 @@ class ChartScreenshotCapture:
     the MT5 Python API has limited screenshot capabilities.
     """
     
-    def __init__(self, mt5_window_title: str = "MetaTrader 5"):
+    def __init__(self, mt5_window_title: str = "N1 Capital Markets MT5"):
         """
         Initialize screenshot capture.
         

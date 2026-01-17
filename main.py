@@ -486,6 +486,41 @@ Bot is ready and {'testing all features' if self.dry_run else 'monitoring for tr
     
     # Command handler methods for Telegram
     
+    def capture_test_screenshot(self) -> Optional[Path]:
+        """
+        Capture a test screenshot for manual testing.
+        
+        Returns:
+            Path to captured screenshot or None if failed
+        """
+        try:
+            if not hasattr(self, 'chart_screenshot'):
+                logger.error("Chart screenshot module not available")
+                return None
+            
+            # Capture test screenshot
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"test_screenshot_{timestamp}.png"
+            output_path = Path("screenshots") / datetime.now().strftime("%Y-%m-%d") / filename
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            
+            screenshot_path = self.chart_screenshot.capture_chart_screenshot(
+                symbol=self.config.trading_symbol,
+                timeframe="M5",
+                output_path=output_path
+            )
+            
+            if screenshot_path:
+                logger.info(f"Test screenshot captured: {screenshot_path}")
+                return screenshot_path
+            else:
+                logger.error("Failed to capture test screenshot")
+                return None
+                
+        except Exception as e:
+            logger.error(f"Error in test screenshot capture: {e}")
+            return None
+    
     def send_periodic_status_update(self):
         """Send periodic status update to Telegram."""
         if not self.telegram:
@@ -496,7 +531,7 @@ Bot is ready and {'testing all features' if self.dry_run else 'monitoring for tr
             current_time = datetime.now(pytz.timezone(self.config.timezone))
             
             # Only send during trading hours or every 2 hours
-            is_trading_time = self.scheduler.is_trading_window(current_time) if self.scheduler else False
+            is_trading_time = is_trading_window(current_time) if self.scheduler else False
             
             status_msg = f"""
 *StructureScout Status Update*

@@ -78,6 +78,7 @@ class TelegramNotifier:
                 self.application.add_handler(CommandHandler("start", self._cmd_start))
                 self.application.add_handler(CommandHandler("status", self._cmd_status))
                 self.application.add_handler(CommandHandler("balance", self._cmd_balance))
+                self.application.add_handler(CommandHandler("screenshot", self._cmd_screenshot))
                 self.application.add_handler(CommandHandler("today", self._cmd_today))
                 self.application.add_handler(CommandHandler("stop", self._cmd_stop))
                 self.application.add_handler(CommandHandler("resume", self._cmd_resume))
@@ -275,6 +276,32 @@ Good luck trading! 📈
         except Exception as e:
             logger.error(f"Error in /status command: {e}")
             await update.message.reply_text(f"❌ Error getting status: {e}")
+    
+    async def _cmd_screenshot(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        """Handle /screenshot command - manually test screenshot capture."""
+        if not self.bot_instance:
+            await update.message.reply_text("❌ Bot instance not available")
+            return
+        
+        await update.message.reply_text("📸 Capturing test screenshot...")
+        
+        try:
+            # Trigger manual screenshot capture
+            screenshot_path = self.bot_instance.capture_test_screenshot()
+            
+            if screenshot_path:
+                # Send the screenshot to Telegram
+                await self.send_photo(
+                    photo_path=str(screenshot_path),
+                    caption=f"📸 *Test Screenshot Captured*\n\n🔍 *File:* {screenshot_path.name}\n📏 *Size:* {screenshot_path.stat().st_size:,} bytes\n⏰ *Time:* {datetime.now().strftime('%I:%M %p EST')}"
+                )
+                logger.info(f"User {update.effective_user.id} requested screenshot test")
+            else:
+                await update.message.reply_text("❌ Failed to capture screenshot. Check MT5 window visibility.")
+                
+        except Exception as e:
+            logger.error(f"Error in /screenshot command: {e}")
+            await update.message.reply_text(f"❌ Error capturing screenshot: {e}")
     
     async def _cmd_balance(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """Handle /balance command."""
