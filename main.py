@@ -435,8 +435,8 @@ Bot is ready and {'testing all features' if self.dry_run else 'monitoring for tr
         self.scheduler.schedule_periodic_task("30_min", self.send_periodic_status_update)
         self.scheduler.schedule_periodic_task("2_hour", self.send_periodic_status_update)
         
-        # Add hourly status updates for 24/7 monitoring
-        self.scheduler.schedule_periodic_task("1_hour", self.send_periodic_status_update)
+        # Add 15-minute status updates for better monitoring
+        self.scheduler.schedule_periodic_task("15_min", self.send_periodic_status_update)
         
         logger.info("Scheduled periodic status updates")
         
