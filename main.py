@@ -32,6 +32,7 @@ from config import get_config
 
 # Import modules
 from modules.mt5_connection import MT5Connection, get_previous_day_levels, detect_broker_symbol
+from modules.chart_screenshot import ChartScreenshotCapture
 from modules.gpt_analysis import analyze_chart_with_gpt4, validate_setup_rules, calculate_position_size
 from modules.telegram_bot import TelegramNotifier, format_setup_alert, format_daily_summary
 from modules.data_logger import log_analysis_to_csv, get_weekly_summary_stats
@@ -80,6 +81,7 @@ class StructureScoutBot:
         
         # Initialize components
         self.mt5_connection: Optional[MT5Connection] = None
+        self.chart_screenshot: Optional[ChartScreenshotCapture] = None
         self.telegram: Optional[TelegramNotifier] = None
         self.scheduler: Optional[TradingScheduler] = None
         self.news_calendar: Optional[NewsCalendarManager] = None
@@ -142,8 +144,8 @@ class StructureScoutBot:
                 
                 # Test screenshot capture
                 print("\nTesting screenshot capture...")
-                from modules.mt5_connection import get_chart_screenshot
-                test_screenshot = get_chart_screenshot(
+                self.chart_screenshot = ChartScreenshotCapture()
+                test_screenshot = self.chart_screenshot.capture_chart_screenshot(
                     symbol=self.config.trading_symbol,
                     timeframe="M5",
                     width=800,
@@ -350,7 +352,7 @@ Bot is ready and {'testing all features' if self.dry_run else 'monitoring for tr
             
             # Capture screenshot (works in both dry-run and live mode)
             logger.info("Capturing chart screenshot...")
-            screenshot_path = get_chart_screenshot(
+            screenshot_path = self.chart_screenshot.capture_chart_screenshot(
                 symbol=self.config.trading_symbol,
                 timeframe="M5",
                 width=1920,
